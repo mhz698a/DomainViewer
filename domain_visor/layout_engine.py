@@ -27,6 +27,8 @@ class LayoutEngine:
         # Constantes de YearItem
         self.year_height = 15.0
         self.year_top_padding = 8.0
+        self.year_spacing = 4.0
+        self.year_margin_sides = 8.0
 
     def _get_spacing_after_domain(self, domain_upper, domain_lower, connections):
         """
@@ -65,9 +67,12 @@ class LayoutEngine:
             col_height = 50.0
             for idx, domain in enumerate(sd.domains):
                 # Altura correcta del dominio considerando: encabezado (28px) + padding superior (8px)
-                # + (años * 15px) + padding inferior (8px)
+                # + (años * 15px) + (espaciado_entre_años) + padding inferior (8px)
                 years_count = len(domain.years)
-                domain_height = self.header_height + self.year_top_padding + (years_count * self.year_height) + self.year_top_padding
+                years_total_height = 0.0
+                if years_count > 0:
+                    years_total_height = (years_count * self.year_height) + ((years_count - 1) * self.year_spacing)
+                domain_height = self.header_height + self.year_top_padding + years_total_height + self.year_top_padding
                 
                 if idx < len(sd.domains) - 1:
                     spacing = self._get_spacing_after_domain(domain, sd.domains[idx+1], container.connections)
@@ -99,18 +104,23 @@ class LayoutEngine:
             for idx, domain in enumerate(sd.domains):
                 # Altura calibrada del bloque de dominio
                 years_count = len(domain.years)
-                domain_height = self.header_height + self.year_top_padding + (years_count * self.year_height) + self.year_top_padding
+                years_total_height = 0.0
+                if years_count > 0:
+                    years_total_height = (years_count * self.year_height) + ((years_count - 1) * self.year_spacing)
+                domain_height = self.header_height + self.year_top_padding + years_total_height + self.year_top_padding
 
                 dom_x = sd_x + 10.0
                 dom_y = current_y
                 dom_width = self.column_width - 20.0
                 domains_geom[domain] = (dom_x, dom_y, dom_width, domain_height)
 
-                # Posicionar YearItems
+                # Posicionar YearItems con márgenes a los lados y espaciado vertical
                 year_start_y = dom_y + self.header_height + self.year_top_padding
                 for idx_year, year in enumerate(domain.years):
-                    y_pos = year_start_y + idx_year * self.year_height
-                    years_geom[year] = (dom_x, y_pos, dom_width, self.year_height)
+                    y_pos = year_start_y + idx_year * (self.year_height + self.year_spacing)
+                    y_x = dom_x + self.year_margin_sides
+                    y_width = dom_width - (2.0 * self.year_margin_sides)
+                    years_geom[year] = (y_x, y_pos, y_width, self.year_height)
 
                 if idx < len(sd.domains) - 1:
                     spacing = self._get_spacing_after_domain(domain, sd.domains[idx+1], container.connections)
