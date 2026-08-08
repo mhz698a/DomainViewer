@@ -9,6 +9,7 @@ from PyQt6.QtGui import QBrush, QColor, QPainter, QShortcut, QKeySequence
 from domain_visor.theme import Theme
 from domain_visor.render_engine import RenderEngine
 from domain_visor.json_editor import JSONEditorPanel
+from domain_visor.character_manager import CharacterManager
 
 class ZoomableGraphicsView(QGraphicsView):
     """
@@ -113,6 +114,10 @@ class VasculumApp(QMainWindow):
         self.init_ui()
 
     def init_ui(self):
+        # Asegurarse de realizar la verificación y el escaneo de la caché al inicio del programa (requisito)
+        self.character_manager = CharacterManager()
+        self.character_manager.verify_cache_at_startup()
+
         # 1. Crear el splitter central
         self.splitter = QSplitter(Qt.Orientation.Horizontal, self)
         self.splitter.setStyleSheet("""
