@@ -148,8 +148,21 @@ class CharacterIconItem(QGraphicsItem):
 
         # 1. Dibujar Imagen o "?" (requisito 4)
         if self.pixmap and not self.pixmap.isNull():
-            # Dibujar la imagen escalada para que quepa en el cuadrado de 20x20
-            painter.drawPixmap(rect.toRect(), self.pixmap)
+            # Obtener dimensiones originales de la imagen
+            w = self.pixmap.width()
+            h = self.pixmap.height()
+
+            # Recortar en ratio 1:1, asegurando que el recorte sea en la parte superior (top)
+            side = min(w, h)
+
+            # Calcular origen del recorte
+            # Si w > h (es landscape), centramos horizontalmente en x, pero y empieza en 0 (parte de arriba)
+            # Si w < h (es portrait) o w == h, x empieza en 0, e y empieza en 0 (parte de arriba)
+            x_src = int((w - side) / 2) if w > h else 0
+            y_src = 0
+
+            # Dibujar el fragmento recortado escalándolo a la caja de 20x20px
+            painter.drawPixmap(rect.toRect(), self.pixmap, QRectF(x_src, y_src, side, side).toRect())
         else:
             # Mostrar icono de "?" con texto "{position}?"
             painter.setBrush(QBrush(QColor("#2d2d2d")))
