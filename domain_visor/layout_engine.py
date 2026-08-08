@@ -1,5 +1,7 @@
 # domain_visor/layout_engine.py
 
+from domain_visor.character_manager import CharacterManager
+
 class LayoutEngine:
     """
     Responsabilidad única de diseño y posicionamiento:
@@ -25,10 +27,25 @@ class LayoutEngine:
         self.header_height = 28.0
 
         # Constantes de YearItem
-        self.year_height = 15.0
+        self.year_base_height = 15.0
         self.year_top_padding = 8.0
         self.year_spacing = 4.0
         self.year_margin_sides = 8.0
+
+        # Instancia de CharacterManager para calcular geometrías dinámicas
+        self.char_manager = CharacterManager()
+
+    def get_year_height(self, year_value: int) -> float:
+        """
+        Calcula la altura dinámica del año.
+        Si tiene perfiles/personajes detectados, la altura se incrementa dinámicamente
+        para dar espacio a la nueva fila de personajes (15px año + 4px separación + 20px perfiles = 39.0px).
+        Si no, conserva el tamaño base de 15.0px.
+        """
+        characters = self.char_manager.get_characters_for_year(year_value)
+        if characters:
+            return 39.0
+        return self.year_base_height
 
     def _get_spacing_after_domain(self, domain_upper, domain_lower, connections):
         """
@@ -67,11 +84,14 @@ class LayoutEngine:
             col_height = 50.0
             for idx, domain in enumerate(sd.domains):
                 # Altura correcta del dominio considerando: encabezado (28px) + padding superior (8px)
-                # + (años * 15px) + (espaciado_entre_años) + padding inferior (8px)
+                # + (alturas dinámicas de los años) + (espaciado_entre_años) + padding inferior (8px)
                 years_count = len(domain.years)
                 years_total_height = 0.0
                 if years_count > 0:
-                    years_total_height = (years_count * self.year_height) + ((years_count - 1) * self.year_spacing)
+                    for yr in domain.years:
+                        years_total_height += self.get_year_height(yr.value)
+                    years_total_height += (years_count - 1) * self.year_spacing
+
                 domain_height = self.header_height + self.year_top_padding + years_total_height + self.year_top_padding
                 
                 if idx < len(sd.domains) - 1:
@@ -106,7 +126,10 @@ class LayoutEngine:
                 years_count = len(domain.years)
                 years_total_height = 0.0
                 if years_count > 0:
-                    years_total_height = (years_count * self.year_height) + ((years_count - 1) * self.year_spacing)
+                    for yr in domain.years:
+                        years_total_height += self.get_year_height(yr.value)
+                    years_total_height += (years_count - 1) * self.year_spacing
+
                 domain_height = self.header_height + self.year_top_padding + years_total_height + self.year_top_padding
 
                 dom_x = sd_x + 10.0
@@ -114,13 +137,18 @@ class LayoutEngine:
                 dom_width = self.column_width - 20.0
                 domains_geom[domain] = (dom_x, dom_y, dom_width, domain_height)
 
-                # Posicionar YearItems con márgenes a los lados y espaciado vertical
+                # Posicionar YearItems con márgenes a los lados y espaciado vertical dinámico
                 year_start_y = dom_y + self.header_height + self.year_top_padding
+                current_year_y = year_start_y
+
                 for idx_year, year in enumerate(domain.years):
-                    y_pos = year_start_y + idx_year * (self.year_height + self.year_spacing)
+                    y_height = self.get_year_height(year.value)
                     y_x = dom_x + self.year_margin_sides
                     y_width = dom_width - (2.0 * self.year_margin_sides)
-                    years_geom[year] = (y_x, y_pos, y_width, self.year_height)
+                    years_geom[year] = (y_x, current_year_y, y_width, y_height)
+
+                    # Avanzar para el siguiente año
+                    current_year_y += y_height + self.year_spacing
 
                 if idx < len(sd.domains) - 1:
                     spacing = self._get_spacing_after_domain(domain, sd.domains[idx+1], container.connections)

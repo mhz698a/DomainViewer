@@ -9,6 +9,8 @@ from PyQt6.QtGui import QBrush, QColor, QPainter, QShortcut, QKeySequence
 from domain_visor.theme import Theme
 from domain_visor.render_engine import RenderEngine
 from domain_visor.json_editor import JSONEditorPanel
+from domain_visor.character_manager import CharacterManager
+from domain_visor.progress_dialog import ProgressDialog
 
 class ZoomableGraphicsView(QGraphicsView):
     """
@@ -113,6 +115,8 @@ class VasculumApp(QMainWindow):
         self.init_ui()
 
     def init_ui(self):
+        self.character_manager = CharacterManager()
+
         # 1. Crear el splitter central
         self.splitter = QSplitter(Qt.Orientation.Horizontal, self)
         self.splitter.setStyleSheet("""
@@ -152,9 +156,6 @@ class VasculumApp(QMainWindow):
         # Conectar cambios del tree view para el guardado automático y renderizado
         self.json_panel.tree.json_changed.connect(self.on_json_data_changed)
 
-        # Renderizar escena inicial
-        self.trigger_render()
-
         # 6. Configurar atajos de teclado para Zoom (Paso 2)
         self.setup_shortcuts()
 
@@ -169,6 +170,12 @@ class VasculumApp(QMainWindow):
 
         # Conectar el botón para mostrar/ocultar el editor
         self.view.toggle_button.clicked.connect(self.toggle_json_editor)
+
+        # 8. Mostrar Ventana de Progreso en Segundo Plano para Indexación de JSON/Personajes y carga de imágenes
+        self.progress_dialog = ProgressDialog(self.character_manager, self)
+        # Una vez que termine la indexación, realizamos el re-renderizado inicial de forma segura
+        self.progress_dialog.finished.connect(self.trigger_render)
+        self.progress_dialog.start_loading()
 
     def restore_editor_visible_state(self):
         editor_visible_setting = self.settings.value("json_editor_visible")
@@ -229,10 +236,6 @@ class VasculumApp(QMainWindow):
         except Exception as e:
             tb = traceback.format_exc()
             self.show_error(f"Error de dibujo o validación en el renderizado:\n{tb}")
-
-    def show_error(self, message):
-        self.json_panel.error_label.setText(message)
-        self.json_panel.error_label.setVisible(True)
 
     def setup_shortcuts(self):
         # Atajos para Zoom In (Ctrl + + y Ctrl + =)
