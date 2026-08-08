@@ -30,9 +30,16 @@ if __name__ == "__main__":
             if idx + 1 < len(sys.argv):
                 export_path = sys.argv[idx + 1]
                 
-                # Instanciar el visor sin mostrar la ventana (Headless)
+                # Instanciar el visor sin iniciar hilos ni mostrar la ventana (Headless)
                 window = VasculumApp(JSON_DOMAINS, CONTAINER_DOMAINS)
                 
+                # Detener el diálogo de progreso de forma limpia
+                if hasattr(window, 'progress_dialog') and window.progress_dialog:
+                    window.progress_dialog.thread.quit()
+                    window.progress_dialog.thread.wait()
+                    window.progress_dialog.reject()
+                window.trigger_render()
+
                 from PyQt6.QtGui import QImage, QPainter, QColor
                 from domain_visor.theme import Theme # type: ignore
                 
