@@ -29,6 +29,21 @@ class CharacterIconItem(QGraphicsItem):
 
         # Formatear el Tooltip (requisito 5): "{name} - {alterego}"
         # Transformación nombre propio (Title Case) y sin guiones bajos
+        self.update_tooltip_and_attributes(char_data)
+
+        # Cargar pixmap de forma segura usando la caché global pre-cargada
+        self.load_pixmap()
+
+        # Configurar cursor apuntador para interacción (requisito clásico)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def update_tooltip_and_attributes(self, char_data):
+        self.position = char_data.get("position", 1)
+        self.name = char_data.get("name", "")
+        self.alterego = char_data.get("alterego", "")
+        self.icon_path = char_data.get("icon_path", "")
+        self.character_path = char_data.get("character_path", "")
+
         formatted_name = self.name.replace("_", " ").strip().title()
         formatted_alterego = self.alterego.replace("_", " ").strip().title()
 
@@ -40,7 +55,7 @@ class CharacterIconItem(QGraphicsItem):
         tooltip_text = f"{formatted_name} - {formatted_alterego}"
         self.setToolTip(tooltip_text)
 
-        # Cargar pixmap de forma segura usando la caché global pre-cargada
+    def load_pixmap(self):
         self.pixmap = None
         if self.icon_path and self.character_path:
             full_img_path = str(Path(self.character_path) / self.icon_path)
@@ -51,8 +66,75 @@ class CharacterIconItem(QGraphicsItem):
                     self.pixmap = QPixmap(full_img_path)
                     PIXMAP_CACHE[full_img_path] = self.pixmap
 
-        # Configurar cursor apuntador para interacción (requisito clásico)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            from domain_visor.character_dialog import CharacterEditDialog
+            # Encontrar el widget padre/ventana para pasarlo como parent del diálogo
+            view = None
+            scene = self.scene()
+            if scene:
+                views = scene.views()
+                if views:
+                    view = views[0]
+
+            # Guardamos datos identificadores anteriores para poder ubicar y actualizar en caché correctamente
+            old_name = self.name
+            old_char_path = self.character_path
+
+            # Instanciar y mostrar el diálogo modal
+            dialog = CharacterEditDialog(self.char_data, parent=view)
+            if dialog.exec() == CharacterEditDialog.DialogCode.Accepted and dialog.saved:
+                new_data = dialog.char_data
+
+                # 1. Actualizar el diccionario char_data original (mutación inplace)
+                self.char_data.clear()
+                self.char_data.update(new_data)
+
+                # 2. Invalidad/Remover cache del pixmap antiguo y precargar el nuevo para este personaje
+                if self.icon_path and self.character_path:
+                    old_img_path = str(Path(self.character_path) / self.icon_path)
+                    if old_img_path in PIXMAP_CACHE:
+                        del PIXMAP_CACHE[old_img_path]
+
+                # 3. Actualizar atributos y tooltip locales de este ítem
+                self.update_tooltip_and_attributes(new_data)
+                self.load_pixmap()
+
+                # 4. Actualizar la caché del CharacterManager
+                # Encontrar el manager que reside en el YearItem del que formamos parte
+                # O si no, podemos usar la instancia global/del año.
+                from domain_visor.year_item import YearItem
+                mgr = YearItem.get_character_manager()
+                year_str = str(new_data.get("year"))
+                if year_str in mgr._cache:
+                    # Buscar el personaje en la lista de caché por su ID/posición original o ruta y actualizarlo
+                    for idx, char in enumerate(mgr._cache[year_str]):
+                        if char.get("character_path") == old_char_path or char.get("name") == old_name:
+                            mgr._cache[year_str][idx] = new_data.copy()
+                            break
+                    mgr.save_cache_file()
+
+                # 5. Forzar repintado del ítem
+                self.update()
+
+                # 6. Forzar re-renderizado de toda la escena para actualizar todo (por ejemplo, si cambió el orden)
+                # Buscamos la app ventana principal
+                main_window = None
+                if view:
+                    parent_widget = view.parent()
+                    while parent_widget:
+                        from domain_visor.scene_view import VasculumApp
+                        if isinstance(parent_widget, VasculumApp):
+                            main_window = parent_widget
+                            break
+                        parent_widget = parent_widget.parent()
+
+                if main_window:
+                    main_window.trigger_render()
+
+            event.accept()
+        else:
+            super().mousePressEvent(event)
 
     def boundingRect(self) -> QRectF:
         return QRectF(0, 0, self._size, self._size)
@@ -66,8 +148,21 @@ class CharacterIconItem(QGraphicsItem):
 
         # 1. Dibujar Imagen o "?" (requisito 4)
         if self.pixmap and not self.pixmap.isNull():
-            # Dibujar la imagen escalada para que quepa en el cuadrado de 20x20
-            painter.drawPixmap(rect.toRect(), self.pixmap)
+            # Obtener dimensiones originales de la imagen
+            w = self.pixmap.width()
+            h = self.pixmap.height()
+
+            # Recortar en ratio 1:1, asegurando que el recorte sea en la parte superior (top)
+            side = min(w, h)
+
+            # Calcular origen del recorte
+            # Si w > h (es landscape), centramos horizontalmente en x, pero y empieza en 0 (parte de arriba)
+            # Si w < h (es portrait) o w == h, x empieza en 0, e y empieza en 0 (parte de arriba)
+            x_src = int((w - side) / 2) if w > h else 0
+            y_src = 0
+
+            # Dibujar el fragmento recortado escalándolo a la caja de 20x20px
+            painter.drawPixmap(rect.toRect(), self.pixmap, QRectF(x_src, y_src, side, side).toRect())
         else:
             # Mostrar icono de "?" con texto "{position}?"
             painter.setBrush(QBrush(QColor("#2d2d2d")))
