@@ -65,5 +65,6 @@ if __name__ == "__main__":
         pass
 
     window = VasculumApp(JSON_DOMAINS, CONTAINER_DOMAINS)
-    window.show()
+    # Requisito: la ventana debe mostrarse maximizada al aparecer
+    window.showMaximized()
     sys.exit(app.exec())

@@ -171,7 +171,7 @@ class VasculumApp(QMainWindow):
         # Conectar el botón para mostrar/ocultar el editor
         self.view.toggle_button.clicked.connect(self.toggle_json_editor)
 
-        # 8. Mostrar Ventana de Progreso en Segundo Plano para Indexación de JSON/Personajes
+        # 8. Mostrar Ventana de Progreso en Segundo Plano para Indexación de JSON/Personajes y carga de imágenes
         self.progress_dialog = ProgressDialog(self.character_manager, self)
         # Una vez que termine la indexación, realizamos el re-renderizado inicial de forma segura
         self.progress_dialog.finished.connect(self.trigger_render)

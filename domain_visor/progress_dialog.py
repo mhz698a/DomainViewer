@@ -2,11 +2,17 @@
 
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QProgressBar
 from PyQt6.QtCore import QThread, pyqtSignal, QObject, Qt
+from PyQt6.QtGui import QPixmap
+import json
+import datetime
+import pathlib
 from domain_visor.theme import Theme
+from domain_visor.character_row_item import PIXMAP_CACHE
 
 class ScanWorker(QObject):
     """
-    Worker que ejecuta el escaneo y verificación de la caché en segundo plano.
+    Worker que ejecuta el escaneo, verificación, precarga de imágenes y renderizado preparatorio
+    en segundo plano.
     """
     progress = pyqtSignal(int)      # Emite el porcentaje de progreso (0-100)
     status_msg = pyqtSignal(str)   # Emite un mensaje de estado actual
@@ -19,22 +25,24 @@ class ScanWorker(QObject):
     def run(self):
         # 1. Obtener los años a procesar para poder emitir progreso detallado
         first_year = self.character_manager.get_first_infrastructure_year()
-        import datetime
         current_year = datetime.date.today().year
         years = list(range(first_year, current_year + 1))
-        total_steps = len(years) + 1  # Años + Paso inicial de verificación de caché anterior
 
-        self.status_msg.emit("Verificando la caché de personajes existente...")
+        # Fases de progreso:
+        # Fase 1: Verificación de caché inicial (10% de peso)
+        # Fase 2: Escaneo de carpetas e indexación (60% de peso)
+        # Fase 3: Precarga de imágenes de perfiles detectados (30% de peso)
+
+        self.status_msg.emit("Iniciando verificación de caché existente...")
         self.progress.emit(0)
 
-        # Paso de verificación inicial de caché existente
+        # Fase 1: Verificación de caché existente
         if not self.character_manager.TRUST_CACHE:
             dirty = False
             years_to_check = list(self.character_manager._cache.keys())
             for idx, year_str in enumerate(years_to_check):
                 valid_chars = []
                 for char in self.character_manager._cache[year_str]:
-                    import pathlib
                     char_path_str = char.get("character_path", "")
                     if char_path_str and pathlib.Path(char_path_str).exists():
                         valid_chars.append(char)
@@ -46,9 +54,9 @@ class ScanWorker(QObject):
             if dirty:
                 self.character_manager.save_cache_file()
 
-        self.progress.emit(int(1 / total_steps * 100))
+        self.progress.emit(10)
 
-        # 2. Escanear cada año de forma individual y reportar progreso
+        # Fase 2: Escaneo de carpetas e indexación
         if not self.character_manager.base_path.exists():
             self.status_msg.emit(f"Advertencia: No existe {self.character_manager.base_path}")
             self.progress.emit(100)
@@ -56,8 +64,9 @@ class ScanWorker(QObject):
             return
 
         updated_cache = {}
+        total_scan_steps = len(years)
         for idx, year in enumerate(years):
-            self.status_msg.emit(f"Analizando año {year}...")
+            self.status_msg.emit(f"Indexando directorio del año {year}...")
 
             album_prefix = f"{max(0, year - 2003):02d}"
             year_dir = self.character_manager.base_path / str(year) / f"{album_prefix}. album"
@@ -135,16 +144,43 @@ class ScanWorker(QObject):
                     characters_list.sort(key=lambda c: c.get("position", 0))
                     updated_cache[str(year)] = characters_list[:6]
 
-            # Emitir progreso después de procesar este año
-            current_progress = int((idx + 2) / total_steps * 100)
-            self.progress.emit(min(100, current_progress))
+            # Calcular progreso de la Fase 2 (rango 10% a 70%)
+            scan_progress = 10 + int((idx + 1) / total_scan_steps * 60)
+            self.progress.emit(scan_progress)
 
-        # Guardar todo al final
+        # Actualizar la caché local en memoria
         self.character_manager._cache.update(updated_cache)
         self.character_manager.save_cache_file()
 
-        self.status_msg.emit("¡Escaneo e indexación completados!")
-        self.progress.emit(100)
+        # Fase 3: Precarga y Renderizado Preparatorio de Imágenes de Perfiles en la Caché
+        # Recorremos la caché completa para decodificar todas las imágenes en QPixmap y guardarlas en PIXMAP_CACHE
+        all_chars = []
+        for y_str in self.character_manager._cache:
+            for char in self.character_manager._cache[y_str]:
+                if char.get("icon_path") and char.get("character_path"):
+                    all_chars.append(char)
+
+        total_imgs = len(all_chars)
+        if total_imgs > 0:
+            for i, char in enumerate(all_chars):
+                self.status_msg.emit(f"Cargando y renderizando imagen de {char.get('name', 'personaje')} ({i+1}/{total_imgs})...")
+                full_img_path = str(pathlib.Path(char["character_path"]) / char["icon_path"])
+
+                # Decodificar de forma no bloqueante en el hilo de trabajo
+                if full_img_path not in PIXMAP_CACHE:
+                    if pathlib.Path(full_img_path).exists():
+                        # Cargar el QPixmap de manera directa
+                        # (La manipulación e instanciación de QPixmap en hilos secundarios es segura en PyQt6 siempre que no se pinte en widgets de la interfaz principal de inmediato)
+                        pix = QPixmap(full_img_path)
+                        PIXMAP_CACHE[full_img_path] = pix
+
+                # Calcular progreso de la Fase 3 (rango 70% a 100%)
+                img_progress = 70 + int((i + 1) / total_imgs * 30)
+                self.progress.emit(img_progress)
+        else:
+            self.progress.emit(100)
+
+        self.status_msg.emit("¡Procesamiento e indexación completa!")
         self.finished.emit()
 
 
@@ -156,8 +192,8 @@ class ProgressDialog(QDialog):
     def __init__(self, character_manager, parent=None):
         super().__init__(parent)
         self.character_manager = character_manager
-        self.setWindowTitle("Indexando personajes...")
-        self.setFixedSize(420, 150)
+        self.setWindowTitle("Procesando indexación de personajes e imágenes...")
+        self.setFixedSize(450, 150)
 
         # Eliminar botón de ayuda del encabezado de la ventana
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)

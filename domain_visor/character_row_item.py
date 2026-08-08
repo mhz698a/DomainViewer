@@ -8,6 +8,9 @@ from PyQt6.QtWidgets import QGraphicsItem, QToolTip
 
 from domain_visor.theme import Theme
 
+# Caché global en memoria para las imágenes pre-cargadas en el hilo secundario
+PIXMAP_CACHE = {}
+
 class CharacterIconItem(QGraphicsItem):
     """
     Representa un cuadrado individual de perfil de personaje de 20x20px.
@@ -37,12 +40,16 @@ class CharacterIconItem(QGraphicsItem):
         tooltip_text = f"{formatted_name} - {formatted_alterego}"
         self.setToolTip(tooltip_text)
 
-        # Cargar pixmap de forma segura
+        # Cargar pixmap de forma segura usando la caché global pre-cargada
         self.pixmap = None
         if self.icon_path and self.character_path:
-            full_img_path = Path(self.character_path) / self.icon_path
-            if full_img_path.exists():
-                self.pixmap = QPixmap(str(full_img_path))
+            full_img_path = str(Path(self.character_path) / self.icon_path)
+            if full_img_path in PIXMAP_CACHE:
+                self.pixmap = PIXMAP_CACHE[full_img_path]
+            else:
+                if Path(full_img_path).exists():
+                    self.pixmap = QPixmap(full_img_path)
+                    PIXMAP_CACHE[full_img_path] = self.pixmap
 
         # Configurar cursor apuntador para interacción (requisito clásico)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
