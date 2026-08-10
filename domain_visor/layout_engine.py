@@ -9,7 +9,7 @@ class LayoutEngine:
 
     El renderer ya no calcula posiciones; en su lugar, consume los resultados de esta clase.
     """
-    def __init__(self):
+    def __init__(self, char_manager=None):
         # Constantes de márgenes y geometría del lienzo
         self.margin_left = 100.0
         self.margin_top = 40.0
@@ -33,7 +33,7 @@ class LayoutEngine:
         self.year_margin_sides = 8.0
 
         # Instancia de CharacterManager para calcular geometrías dinámicas
-        self.char_manager = CharacterManager()
+        self.char_manager = char_manager if char_manager is not None else CharacterManager()
 
     def get_year_height(self, year_value: int) -> float:
         """

@@ -123,7 +123,7 @@ class ScanWorker(QObject):
                                     "age": age,
                                     "icon_path": icon_path,
                                     "background_path": "",
-                                    "type_underwear": "",
+                                    "type_underwear": [],
                                     "short_masked_alterego": "",
                                     "character_path": str(item.resolve()),
                                     "color_group": "",
