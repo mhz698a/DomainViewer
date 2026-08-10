@@ -15,8 +15,8 @@ class RenderEngine:
     Delega el cálculo de diseño al LayoutEngine, la resolución de color al ColorResolver,
     la resolución de puertos lógicos/visuales al PortRegistry y la creación de cables al ConnectionEngine.
     """
-    def __init__(self):
-        self.layout_engine = LayoutEngine()
+    def __init__(self, char_manager=None):
+        self.layout_engine = LayoutEngine(char_manager)
         self.connection_engine = ConnectionEngine()
 
     def render(self, scene, container_path, domains_path):

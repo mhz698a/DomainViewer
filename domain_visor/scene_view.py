@@ -2,7 +2,7 @@
 
 import json
 import traceback
-from PyQt6.QtWidgets import QMainWindow, QGraphicsView, QGraphicsScene, QSplitter, QPushButton
+from PyQt6.QtWidgets import QMainWindow, QGraphicsView, QGraphicsScene, QSplitter, QPushButton, QMenuBar, QMenu
 from PyQt6.QtCore import Qt, QSettings, QByteArray
 from PyQt6.QtGui import QBrush, QColor, QPainter, QShortcut, QKeySequence
 
@@ -11,6 +11,7 @@ from domain_visor.render_engine import RenderEngine
 from domain_visor.json_editor import JSONEditorPanel
 from domain_visor.character_manager import CharacterManager
 from domain_visor.progress_dialog import ProgressDialog
+from domain_visor.year_item import YearItem
 
 class ZoomableGraphicsView(QGraphicsView):
     """
@@ -116,6 +117,8 @@ class VasculumApp(QMainWindow):
 
     def init_ui(self):
         self.character_manager = CharacterManager()
+        # Sincronizar el gestor de personajes a nivel de YearItem
+        YearItem._char_manager = self.character_manager
 
         # 1. Crear el splitter central
         self.splitter = QSplitter(Qt.Orientation.Horizontal, self)
@@ -148,7 +151,7 @@ class VasculumApp(QMainWindow):
         self.view.setScene(self.scene)
 
         # 5. Instanciar RenderEngine para delegar el renderizado
-        self.render_engine = RenderEngine()
+        self.render_engine = RenderEngine(self.character_manager)
 
         # Cargar archivo JSON e inicializar el tree view
         self.load_initial_json()
@@ -170,6 +173,46 @@ class VasculumApp(QMainWindow):
 
         # Conectar el botón para mostrar/ocultar el editor
         self.view.toggle_button.clicked.connect(self.toggle_json_editor)
+
+        # 7.5. Configurar barra de menú oscura "Archivo" con acción "Refresh" (F5)
+        self.menu_bar = self.menuBar()
+        self.menu_bar.setStyleSheet("""
+            QMenuBar {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border-bottom: 1px solid #3e3e42;
+                font-family: Arial;
+                font-size: 12px;
+            }
+            QMenuBar::item {
+                background-color: transparent;
+                padding: 4px 10px;
+            }
+            QMenuBar::item:selected {
+                background-color: #2d2d2d;
+                color: #ffffff;
+            }
+            QMenu {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #3e3e42;
+                font-family: Arial;
+                font-size: 12px;
+            }
+            QMenu::item {
+                padding: 6px 20px;
+                background-color: transparent;
+            }
+            QMenu::item:selected {
+                background-color: #2d2d2d;
+                color: #ffffff;
+            }
+        """)
+
+        file_menu = self.menu_bar.addMenu("Archivo")
+        self.refresh_action = file_menu.addAction("Refresh")
+        self.refresh_action.setShortcut(QKeySequence("F5"))
+        self.refresh_action.triggered.connect(self.refresh_data)
 
         # 8. Mostrar Ventana de Progreso en Segundo Plano para Indexación de JSON/Personajes y carga de imágenes
         self.progress_dialog = ProgressDialog(self.character_manager, self)
@@ -274,6 +317,27 @@ class VasculumApp(QMainWindow):
         rect = self.scene.itemsBoundingRect()
         if not rect.isNull():
             self.view.centerOn(rect.center())
+
+    def refresh_data(self):
+        # Detener diálogo de progreso previo si existía
+        if hasattr(self, 'progress_dialog') and self.progress_dialog:
+            try:
+                self.progress_dialog.thread.quit()
+                self.progress_dialog.thread.wait()
+            except Exception:
+                pass
+
+        # 1. Limpiar caché global de pixmaps para forzar la recarga de imágenes modificadas/nuevas
+        from domain_visor.character_row_item import PIXMAP_CACHE
+        PIXMAP_CACHE.clear()
+
+        # 2. Limpiar el caché de personajes en memoria para obligar a reconstruirlo desde cero desde disco
+        self.character_manager._cache.clear()
+
+        # 3. Instanciar y mostrar de nuevo el ProgressDialog
+        self.progress_dialog = ProgressDialog(self.character_manager, self)
+        self.progress_dialog.finished.connect(self.trigger_render)
+        self.progress_dialog.start_loading()
 
     def closeEvent(self, event):
         # Guardar el estado del splitter al cerrar la aplicación
