@@ -7,9 +7,9 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QLineEdit,
     QComboBox, QPushButton, QMessageBox, QFileDialog, QScrollArea, QWidget,
-    QListWidget, QListWidgetItem
+    QListWidget, QListWidgetItem, QDateEdit
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QDate
 from domain_visor.theme import Theme
 
 class CharacterEditDialog(QDialog):
@@ -25,7 +25,7 @@ class CharacterEditDialog(QDialog):
         self.setWindowTitle("Modificar Personaje")
         self.setModal(True)
         self.setMinimumWidth(600)
-        self.resize(650, 550)
+        self.resize(650, 600)
 
         # Quitar botón de ayuda
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
@@ -46,14 +46,14 @@ class CharacterEditDialog(QDialog):
                 color: {Theme.TEXT_WHITE};
                 font-weight: bold;
             }}
-            QLineEdit {{
+            QLineEdit, QDateEdit {{
                 background-color: #2d2d2d;
                 border: 1px solid #555555;
                 border-radius: 4px;
                 padding: 4px;
                 color: {Theme.TEXT_WHITE};
             }}
-            QLineEdit:focus {{
+            QLineEdit:focus, QDateEdit:focus {{
                 border-color: #85c1e9;
             }}
             QLineEdit[readOnly="true"] {{
@@ -87,6 +87,11 @@ class CharacterEditDialog(QDialog):
                 background-color: #1e1e1e;
             }}
         """)
+
+        # Parsear ruta inicial de carpeta, directorio padre y prefijo de álbum
+        self.initial_character_path = Path(self.char_data.get("character_path", ""))
+        self.parent_dir = self.initial_character_path.parent
+        self.album_prefix = f"{max(0, self.char_data.get('year', 2004) - 2003):02d}"
 
         self.init_ui()
 
@@ -125,9 +130,18 @@ class CharacterEditDialog(QDialog):
         self.txt_alterego = QLineEdit(self.char_data.get("alterego", ""))
         scroll_layout.addWidget(self.txt_alterego, 3, 1, 1, 2)
 
-        # 5. Birthday
+        # 5. Birthday (QDateEdit with Calendar Popup)
         scroll_layout.addWidget(QLabel("Cumpleaños (Birthday):"), 4, 0)
-        self.txt_birthday = QLineEdit(self.char_data.get("birthday", ""))
+        self.txt_birthday = QDateEdit()
+        self.txt_birthday.setCalendarPopup(True)
+        self.txt_birthday.setDisplayFormat("yyyy-MM-dd")
+
+        bday_str = self.char_data.get("birthday", "")
+        bday_date = QDate.fromString(bday_str, "yyyy-MM-dd")
+        if bday_date.isValid():
+            self.txt_birthday.setDate(bday_date)
+        else:
+            self.txt_birthday.setDate(QDate.currentDate())
         scroll_layout.addWidget(self.txt_birthday, 4, 1, 1, 2)
 
         # 6. Age
@@ -219,17 +233,15 @@ class CharacterEditDialog(QDialog):
         self.txt_short_masked = QLineEdit(self.char_data.get("short_masked_alterego", ""))
         scroll_layout.addWidget(self.txt_short_masked, 9, 1, 1, 2)
 
-        # 11. Character Path (QLineEdit + Elegir + Abrir)
+        # 11. Character Path (Readonly, no choose button, auto updated)
         scroll_layout.addWidget(QLabel("Ruta Personaje (Char Path):"), 10, 0)
         self.txt_char_path = QLineEdit(self.char_data.get("character_path", ""))
+        self.txt_char_path.setReadOnly(True)
         scroll_layout.addWidget(self.txt_char_path, 10, 1)
 
         btn_char_layout = QHBoxLayout()
-        self.btn_choose_char = QPushButton("Elegir")
-        self.btn_choose_char.clicked.connect(self.choose_char_dir)
         self.btn_open_char = QPushButton("Abrir")
         self.btn_open_char.clicked.connect(self.open_char_dir)
-        btn_char_layout.addWidget(self.btn_choose_char)
         btn_char_layout.addWidget(self.btn_open_char)
         scroll_layout.addLayout(btn_char_layout, 10, 2)
 
@@ -257,6 +269,24 @@ class CharacterEditDialog(QDialog):
         scroll.setWidget(scroll_content)
         main_layout.addWidget(scroll)
 
+        # Forzar reemplazo inicial de espacios si los hubiera antes de conectar señales
+        self._replace_spaces_real_time(self.txt_name)
+        self._replace_spaces_real_time(self.txt_alterego)
+
+        # Conectar señales en tiempo real para reemplazar espacios por guiones bajos
+        self.txt_name.textChanged.connect(lambda: self._replace_spaces_real_time(self.txt_name))
+        self.txt_alterego.textChanged.connect(lambda: self._replace_spaces_real_time(self.txt_alterego))
+
+        # Conectar señales para actualización automática de ruta
+        self.txt_position.textChanged.connect(self._update_character_path)
+        self.txt_name.textChanged.connect(self._update_character_path)
+        self.txt_alterego.textChanged.connect(self._update_character_path)
+        self.txt_birthday.dateChanged.connect(self._update_character_path)
+        self.txt_age.textChanged.connect(self._update_character_path)
+
+        # Forzar cálculo inicial de ruta si es posible
+        self._update_character_path()
+
         # Footer Buttons
         footer_layout = QHBoxLayout()
         footer_layout.addStretch()
@@ -269,6 +299,42 @@ class CharacterEditDialog(QDialog):
         footer_layout.addWidget(self.btn_save)
         footer_layout.addWidget(self.btn_discard)
         main_layout.addLayout(footer_layout)
+
+    def _replace_spaces_real_time(self, line_edit):
+        text = line_edit.text()
+        if " " in text:
+            cursor_pos = line_edit.cursorPosition()
+            new_text = text.replace(" ", "_")
+            line_edit.blockSignals(True)
+            line_edit.setText(new_text)
+            line_edit.setCursorPosition(cursor_pos)
+            line_edit.blockSignals(False)
+
+    def _update_character_path(self):
+        # 1. Obtener valores actuales o usar fallbacks seguros si están vacíos
+        pos_raw = self.txt_position.text().strip()
+        try:
+            pos_val = int(pos_raw)
+            pos_str = f"{pos_val:02d}"
+        except ValueError:
+            pos_str = pos_raw if pos_raw else "00"
+
+        name_str = self.txt_name.text().strip()
+        alterego_str = self.txt_alterego.text().strip()
+        birthday_str = self.txt_birthday.date().toString("yyyy-MM-dd")
+
+        age_raw = self.txt_age.text().strip()
+        try:
+            age_val = int(age_raw)
+            age_str = f"{age_val:02d}"
+        except ValueError:
+            age_str = age_raw if age_raw else "00"
+
+        # Formato de carpeta: {album_prefix}. {position_padded};{alterego};{name};{birthday};{age_padded}
+        folder_name = f"{self.album_prefix}. {pos_str};{alterego_str};{name_str};{birthday_str};{age_str}"
+        new_path = self.parent_dir / folder_name
+
+        self.txt_char_path.setText(str(new_path.resolve()))
 
     # Métodos de ayuda para los selectores y apertura de archivos
 
@@ -344,18 +410,12 @@ class CharacterEditDialog(QDialog):
         else:
             QMessageBox.warning(self, "Advertencia", f"El archivo no existe:\n{full_path}")
 
-    def choose_char_dir(self):
-        start_dir = self.get_start_directory()
-        directory = QFileDialog.getExistingDirectory(self, "Elegir Carpeta de Personaje", start_dir)
-        if directory:
-            self.txt_char_path.setText(str(Path(directory).resolve()))
-
     def open_char_dir(self):
         char_path = self.txt_char_path.text().strip()
         if char_path and Path(char_path).exists():
             self._open_file_cross_platform(str(Path(char_path).resolve()))
         else:
-            QMessageBox.warning(self, "Advertencia", f"La carpeta de personaje no existe u está vacía.")
+            QMessageBox.warning(self, "Advertencia", f"La carpeta de personaje no existe o está vacía.")
 
     def save_data(self):
         try:
@@ -379,7 +439,8 @@ class CharacterEditDialog(QDialog):
                 return
 
             original_name = self.original_char_data.get("name", "")
-            original_char_path = self.original_char_data.get("character_path", "")
+            original_char_path_str = self.original_char_data.get("character_path", "")
+            original_char_path = Path(original_char_path_str) if original_char_path_str else Path()
 
             # Recolectar ropa interior seleccionada
             selected_underwear = []
@@ -388,35 +449,36 @@ class CharacterEditDialog(QDialog):
                 if item.checkState() == Qt.CheckState.Checked:
                     selected_underwear.append(item.text())
 
-            # Preparar la nueva estructura character_data
+            # La nueva ruta de la carpeta que calculamos automáticamente
+            new_char_path = Path(self.txt_char_path.text().strip())
+
+            # Preparar la nueva estructura character_data (usará el new_char_path ya resuelto)
             updated_data = {
                 "year": int(self.txt_year.text().strip()),
                 "position": position,
                 "name": new_name,
                 "alterego": self.txt_alterego.text().strip(),
-                "birthday": self.txt_birthday.text().strip(),
+                "birthday": self.txt_birthday.date().toString("yyyy-MM-dd"),
                 "age": age,
                 "icon_path": self.txt_icon_path.text().strip(),
                 "background_path": self.txt_bg_path.text().strip(),
                 "type_underwear": selected_underwear,
                 "short_masked_alterego": self.txt_short_masked.text().strip(),
-                "character_path": self.txt_char_path.text().strip(),
+                "character_path": str(new_char_path.resolve()),
                 "color_group": self.cb_color_group.currentText(),
                 "profession_group": self.txt_profession.text().strip()
             }
 
-            # 3. Guardar archivo físico JSON del personaje
-            char_path = Path(updated_data["character_path"])
-            if not char_path.exists():
-                QMessageBox.warning(self, "Validación", f"La ruta de personaje especificada no existe:\n{char_path}")
+            # Validar que exista la ruta original de personaje antes de renombrar
+            if not original_char_path.exists():
+                QMessageBox.warning(self, "Validación", f"La ruta original de personaje no existe:\n{original_char_path}")
                 return
 
-            # Nombres de JSON viejo y nuevo
-            old_json_file = char_path / f"__{original_name}__.json"
-            new_json_file = char_path / f"__{new_name}__.json"
+            # Nombres de JSON viejo y nuevo dentro de la carpeta actual (original)
+            old_json_file = original_char_path / f"__{original_name}__.json"
+            new_json_file = original_char_path / f"__{new_name}__.json"
 
-            # Si el nombre cambió, y el archivo JSON viejo existe, lo borraremos después o renombraremos
-            # Escribir el nuevo JSON
+            # Escribir el nuevo JSON primero
             with open(new_json_file, "w", encoding="utf-8") as jf:
                 json.dump({"character_data": updated_data}, jf, indent=4, ensure_ascii=False)
 
@@ -426,6 +488,20 @@ class CharacterEditDialog(QDialog):
                     old_json_file.unlink()
                 except Exception as ex:
                     print(f"Advertencia eliminando archivo JSON anterior: {ex}")
+
+            # Ahora renombrar la carpeta del personaje si la ruta calculada es diferente
+            if original_char_path.resolve() != new_char_path.resolve():
+                if new_char_path.exists():
+                    QMessageBox.warning(self, "Validación", f"La carpeta destino ya existe:\n{new_char_path}")
+                    return
+
+                try:
+                    # Renombrar carpeta física
+                    original_char_path.rename(new_char_path)
+                except Exception as ex:
+                    QMessageBox.critical(self, "Error al Guardar", f"No se pudo renombrar la carpeta del personaje:\n{ex}")
+                    # Deshacer guardado del json nuevo si es posible o simplemente retornar
+                    return
 
             # Guardar el resultado en self.char_data para devolverlo
             self.char_data = updated_data
