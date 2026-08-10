@@ -6,7 +6,8 @@ import traceback
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QLineEdit,
-    QComboBox, QPushButton, QMessageBox, QFileDialog, QScrollArea, QWidget
+    QComboBox, QPushButton, QMessageBox, QFileDialog, QScrollArea, QWidget,
+    QListWidget, QListWidgetItem
 )
 from PyQt6.QtCore import Qt
 from domain_visor.theme import Theme
@@ -162,21 +163,56 @@ class CharacterEditDialog(QDialog):
         btn_bg_layout.addWidget(self.btn_open_bg)
         scroll_layout.addLayout(btn_bg_layout, 7, 2)
 
-        # 9. Type Underwear (Combobox)
+        # 9. Type Underwear (QListWidget with checkboxes)
         scroll_layout.addWidget(QLabel("Ropa Interior (Type Underwear):"), 8, 0)
-        self.cb_underwear = QComboBox()
+        self.list_underwear = QListWidget()
+        self.list_underwear.setMaximumHeight(120)
+        self.list_underwear.setStyleSheet("""
+            QListWidget {
+                background-color: #2d2d2d;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 4px;
+                color: #ffffff;
+            }
+            QListWidget::item {
+                padding: 4px;
+                color: #ffffff;
+            }
+            QListWidget::item:hover {
+                background-color: #3e3e42;
+            }
+            QListWidget::item:selected {
+                background-color: #2d2d2d;
+                color: #ffffff;
+            }
+        """)
+
         underwear_options = [
-            "", "Boybrief", "Girlbrief Clasic Mid Low rise", "boyshort boxer",
+            "Boybrief", "Girlbrief Clasic Mid Low rise", "boyshort boxer",
             "Thong", "Bikini", "Hipster", "Tanga Brief", "French Cut",
             "Brief Slip", "Brief Mid high rise", "Pantaloons"
         ]
-        self.cb_underwear.addItems(underwear_options)
-        current_underwear = self.char_data.get("type_underwear", "")
-        if current_underwear in underwear_options:
-            self.cb_underwear.setCurrentText(current_underwear)
+
+        # Parse current_underwear backward-compatibly
+        current_underwear = self.char_data.get("type_underwear", [])
+        if isinstance(current_underwear, str):
+            selected_underwear = [current_underwear] if current_underwear else []
+        elif isinstance(current_underwear, list):
+            selected_underwear = current_underwear
         else:
-            self.cb_underwear.setCurrentIndex(0)
-        scroll_layout.addWidget(self.cb_underwear, 8, 1, 1, 2)
+            selected_underwear = []
+
+        for option in underwear_options:
+            item = QListWidgetItem(option)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            if option in selected_underwear:
+                item.setCheckState(Qt.CheckState.Checked)
+            else:
+                item.setCheckState(Qt.CheckState.Unchecked)
+            self.list_underwear.addItem(item)
+
+        scroll_layout.addWidget(self.list_underwear, 8, 1, 1, 2)
 
         # 10. Short Masked Alterego
         scroll_layout.addWidget(QLabel("Short Masked Alterego:"), 9, 0)
@@ -345,6 +381,13 @@ class CharacterEditDialog(QDialog):
             original_name = self.original_char_data.get("name", "")
             original_char_path = self.original_char_data.get("character_path", "")
 
+            # Recolectar ropa interior seleccionada
+            selected_underwear = []
+            for i in range(self.list_underwear.count()):
+                item = self.list_underwear.item(i)
+                if item.checkState() == Qt.CheckState.Checked:
+                    selected_underwear.append(item.text())
+
             # Preparar la nueva estructura character_data
             updated_data = {
                 "year": int(self.txt_year.text().strip()),
@@ -355,7 +398,7 @@ class CharacterEditDialog(QDialog):
                 "age": age,
                 "icon_path": self.txt_icon_path.text().strip(),
                 "background_path": self.txt_bg_path.text().strip(),
-                "type_underwear": self.cb_underwear.currentText(),
+                "type_underwear": selected_underwear,
                 "short_masked_alterego": self.txt_short_masked.text().strip(),
                 "character_path": self.txt_char_path.text().strip(),
                 "color_group": self.cb_color_group.currentText(),
