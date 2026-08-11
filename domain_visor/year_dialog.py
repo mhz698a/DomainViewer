@@ -319,15 +319,19 @@ class YearDialog(QDialog):
         title.setStyleSheet("color: #85c1e9; font-size: 12px;")
         layout.addWidget(title)
 
+        year_root = str(self.year_dir)
+
         self.year_folder_model = QFileSystemModel(self)
         self.year_folder_model.setFilter(
-            QDir.Filter.AllDirs | QDir.Filter.NoDotAndDotDot | QDir.Filter.Readable
+            QDir.Filter.Dirs | QDir.Filter.NoDotAndDotDot | QDir.Filter.Readable
         )
-        self.year_folder_model.setRootPath(str(self.year_dir))
 
         self.year_folder_tree = QTreeView()
         self.year_folder_tree.setModel(self.year_folder_model)
-        self.year_folder_tree.setRootIndex(self.year_folder_model.index(str(self.year_dir)))
+
+        root_index = self.year_folder_model.setRootPath(year_root)
+        self.year_folder_tree.setRootIndex(root_index)
+        self.year_folder_model.directoryLoaded.connect(self._refresh_year_folder_root)
         self.year_folder_tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.year_folder_tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.year_folder_tree.setHeaderHidden(True)
@@ -339,6 +343,15 @@ class YearDialog(QDialog):
 
         layout.addWidget(self.year_folder_tree)
         return container
+
+
+    def _refresh_year_folder_root(self, path: str):
+        if Path(path) != self.year_dir:
+            return
+
+        root_index = self.year_folder_model.index(str(self.year_dir))
+        self.year_folder_tree.setRootIndex(root_index)
+        self.year_folder_tree.expand(root_index)
 
     def open_folder_from_tree(self, index: QModelIndex):
         if not index.isValid() or not self.year_folder_model.isDir(index):
