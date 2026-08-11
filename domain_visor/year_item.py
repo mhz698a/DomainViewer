@@ -134,6 +134,54 @@ class YearItem(QGraphicsItem):
             char_mgr = self.get_character_manager()
             year_path = char_mgr.base_path / str(self._year_value)
 
+            import datetime
+            from domain_visor.year_creator import validate_date_constraints
+
+            # Decidir si aplicamos validación de fecha según si la carpeta del año existe
+            # Y si el archivo de credenciales ya existe
+            from domain_visor.year_dialog import YearDialog
+            temp_dialog = YearDialog(self._year_value, parent_window, base_path=char_mgr.base_path)
+            json_exists = temp_dialog.json_filepath.exists()
+
+            if year_path.exists():
+                # Si la carpeta del año existe:
+                # Solo bloqueamos si es un año en el futuro y NO tiene credenciales creadas todavía
+                today = datetime.date.today()
+                if self._year_value > today.year and not json_exists:
+                    allowed, message = validate_date_constraints(self._year_value)
+                else:
+                    allowed, message = True, ""
+            else:
+                # Si no existe, aplicamos la validación estándar de creación
+                allowed, message = validate_date_constraints(self._year_value)
+
+            if not allowed:
+                from PyQt6.QtWidgets import QMessageBox
+                msg_box = QMessageBox(parent_window)
+                msg_box.setIcon(QMessageBox.Icon.Warning)
+                msg_box.setWindowTitle("Advertencia")
+                msg_box.setText(message)
+                msg_box.setStyleSheet(f"""
+                    QMessageBox {{
+                        background-color: {Theme.APP_BACKGROUND};
+                        color: {Theme.TEXT_WHITE};
+                    }}
+                    QLabel {{
+                        color: {Theme.TEXT_WHITE};
+                    }}
+                    QPushButton {{
+                        background-color: #2d2d2d;
+                        border: 1px solid #555555;
+                        border-radius: 4px;
+                        padding: 6px 12px;
+                        color: {Theme.TEXT_WHITE};
+                        font-weight: bold;
+                    }}
+                """)
+                msg_box.exec()
+                event.accept()
+                return
+
             if not year_path.exists():
                 from domain_visor.year_creator import trigger_year_creation
                 success = trigger_year_creation(self._year_value, parent_window, base_path=char_mgr.base_path)

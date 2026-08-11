@@ -434,6 +434,17 @@ class YearDialog(QDialog):
             QMessageBox.warning(self, "Advertencia", "Seleccione un elemento de la lista para eliminar.")
 
     def save_data(self):
+        # Evitar guardar/crear la credencial de año en años que aún no ocurren si no existía el archivo
+        import datetime
+        today = datetime.date.today()
+        if self.year_value > today.year and not self.json_filepath.exists():
+            from domain_visor.year_creator import validate_date_constraints
+            allowed, message = validate_date_constraints(self.year_value)
+            if not allowed:
+                QMessageBox.warning(self, "Advertencia", f"No se pueden guardar credenciales para un año que aún no ocurre.\n{message}")
+                self.reject()
+                return
+
         try:
             # 1. Obtener la lista de otros paquetes
             other_packages = []
