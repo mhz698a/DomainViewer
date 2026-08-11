@@ -114,9 +114,6 @@ class CableItem(QGraphicsPathItem):
             elif self.connection.type == "exolazo":
                 color = Theme.CABLE_EXOLAZO_COLOR
                 width = 4.0
-            elif self.connection.type == "exocable":
-                color = Theme.CABLE_EXOLAZO_COLOR
-                width = 4.0
             else:
                 color = Theme.CABLE_COLOR
         else:
