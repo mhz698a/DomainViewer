@@ -4,7 +4,8 @@
 from pathlib import Path
 import sys
 import ctypes
-from PyQt6.QtWidgets import QApplication
+import traceback
+from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtGui import QIcon
 
 from domain_visor.scene_view import VasculumApp
@@ -20,8 +21,24 @@ try:
 except Exception:
     pass
 
+def show_unexpected_error(exc_type, exc_value, exc_traceback):
+    traceback_text = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+    print(traceback_text, file=sys.stderr)
+
+    message = QMessageBox()
+    message.setIcon(QMessageBox.Icon.Critical)
+    message.setWindowTitle("Error inesperado")
+    message.setText("El programa se cerrará por un error inesperado.")
+    message.setInformativeText(traceback_text)
+    message.setDetailedText(traceback_text)
+    message.exec()
+
+    QApplication.quit()
+    sys.exit(1)
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    sys.excepthook = show_unexpected_error
     
     # Soporte para exportación headless PNG de prueba (Commit 12.1)
     if "--png_export" in sys.argv:

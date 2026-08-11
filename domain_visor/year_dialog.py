@@ -7,10 +7,10 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QLineEdit,
     QPushButton, QMessageBox, QListWidget, QListWidgetItem, QWidget,
-    QFileSystemModel, QTreeView, QAbstractItemView
+    QTreeView, QAbstractItemView
 )
 from PyQt6.QtCore import Qt, QDir, QModelIndex, QUrl
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtGui import QFileSystemModel, QDesktopServices
 from domain_visor.theme import Theme
 from domain_visor.character_manager import CharacterManager
 
