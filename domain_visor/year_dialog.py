@@ -60,6 +60,7 @@ def calculate_id_package_default(year: int) -> str:
 def find_season_name(year: int, base_path: Path) -> str:
     """
     Busca dentro del año una carpeta que contenga "___".
+    Remueve "___[" y "]" si están presentes para que no salgan visualmente en season_name.
     """
     year_dir = base_path / str(year)
     if not year_dir.exists():
@@ -67,7 +68,10 @@ def find_season_name(year: int, base_path: Path) -> str:
     try:
         for item in year_dir.iterdir():
             if item.is_dir() and "___" in item.name:
-                return item.name
+                name = item.name
+                # Limpieza de "___[" y "]" para season_name
+                name = name.replace("___[", "").replace("]", "")
+                return name
     except Exception:
         pass
     return ""
@@ -198,7 +202,7 @@ class YearDialog(QDialog):
             "season_name": self.auto_season_name,
             "season_abreviation": inner_data.get("season_abreviation", ""),
             "esentia_name": inner_data.get("esentia_name", ""),
-            "id_package_default": self.auto_id_package_default if not inner_data.get("id_package_default") else inner_data.get("id_package_default"),
+            "id_package_default": self.auto_id_package_default, # Generado automáticamente siempre
             "other_id_package_default": inner_data.get("other_id_package_default", [])
         }
 
@@ -207,48 +211,48 @@ class YearDialog(QDialog):
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(15)
 
-        # Grid para campos
+        # Grid para campos (usando claves exactas como etiquetas y traduciendo Estación a Temporada)
         grid = QGridLayout()
         grid.setSpacing(10)
 
-        # Row 0: Año (Readonly)
-        grid.addWidget(QLabel("Año (Year):"), 0, 0)
+        # Row 0: year (Readonly)
+        grid.addWidget(QLabel("year:"), 0, 0)
         self.txt_year = QLineEdit(self.year_data["year"])
         self.txt_year.setReadOnly(True)
         grid.addWidget(self.txt_year, 0, 1)
 
-        # Row 1: Prefix (Readonly)
-        grid.addWidget(QLabel("Prefijo (Prefix):"), 1, 0)
+        # Row 1: prefix (Readonly)
+        grid.addWidget(QLabel("prefix:"), 1, 0)
         self.txt_prefix = QLineEdit(self.year_data["prefix"])
         self.txt_prefix.setReadOnly(True)
         grid.addWidget(self.txt_prefix, 1, 1)
 
-        # Row 2: Season Name (Readonly)
-        grid.addWidget(QLabel("Estación (Season Name):"), 2, 0)
+        # Row 2: season_name (Readonly)
+        grid.addWidget(QLabel("season_name:"), 2, 0)
         self.txt_season_name = QLineEdit(self.year_data["season_name"])
         self.txt_season_name.setReadOnly(True)
         grid.addWidget(self.txt_season_name, 2, 1)
 
-        # Row 3: ID Package Default (Readonly)
-        grid.addWidget(QLabel("ID Paquete Default:"), 3, 0)
+        # Row 3: id_package_default (Readonly)
+        grid.addWidget(QLabel("id_package_default:"), 3, 0)
         self.txt_id_package_default = QLineEdit(self.year_data["id_package_default"])
         self.txt_id_package_default.setReadOnly(True)
         grid.addWidget(self.txt_id_package_default, 3, 1)
 
-        # Row 4: Season Abreviation (Editable)
-        grid.addWidget(QLabel("Abreviación Estación:"), 4, 0)
+        # Row 4: season_abreviation (Editable)
+        grid.addWidget(QLabel("season_abreviation (Abreviación Temporada):"), 4, 0)
         self.txt_season_abreviation = QLineEdit(self.year_data["season_abreviation"])
         grid.addWidget(self.txt_season_abreviation, 4, 1)
 
-        # Row 5: Esentia Name (Editable)
-        grid.addWidget(QLabel("Nombre Esentia:"), 5, 0)
+        # Row 5: esentia_name (Editable)
+        grid.addWidget(QLabel("esentia_name:"), 5, 0)
         self.txt_esentia_name = QLineEdit(self.year_data["esentia_name"])
         grid.addWidget(self.txt_esentia_name, 5, 1)
 
         main_layout.addLayout(grid)
 
         # Otros paquetes ID por defecto
-        main_layout.addWidget(QLabel("Otros Paquetes ID por Defecto (other_id_package_default):"))
+        main_layout.addWidget(QLabel("other_id_package_default:"))
 
         self.list_other_packages = QListWidget()
         for pkg in self.year_data["other_id_package_default"]:
