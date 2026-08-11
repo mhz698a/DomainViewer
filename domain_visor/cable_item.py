@@ -15,13 +15,17 @@ class CableItem(QGraphicsPathItem):
     - Calcular el camino curvo (cúbico Bézier) entre los centros de ambos puertos.
     - Configurar un estilo de lápiz neutral obteniendo el color desde Theme.
     - Mostrar un tooltip interactivo y facilitar su selección con un área de colisión (hitbox) ensanchada (Paso 3).
+    - Soporta brillo/highlight en hover.
+    - Al hacer clic, abre un diálogo para cambiar el nombre, actualizando el JSON de infraestructura.
     """
-    def __init__(self, from_port, to_port, connection, is_special=False, parent=None):
+    def __init__(self, from_port, to_port, connection, is_special=False, parent=None, json_path=None):
         super().__init__(parent)
         self.from_port = from_port
         self.to_port = to_port
         self.connection = connection
         self.is_special = is_special
+        self.json_path = json_path
+        self._hovered = False
 
         # Establecer un zValue alto para que los cables se rendericen por encima de los bloques
         self.setZValue(15.0)
@@ -32,6 +36,9 @@ class CableItem(QGraphicsPathItem):
         # Configurar Tooltip, Habilitar Hover y cursor de mano (Paso 3)
         self.setAcceptHoverEvents(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.update_tooltip()
+
+    def update_tooltip(self):
         if self.connection.name:
             tooltip_text = f"{self.connection.name} ({self.connection.from_year} → {self.connection.to_year})"
         else:
@@ -126,3 +133,56 @@ class CableItem(QGraphicsPathItem):
         stroker = QPainterPathStroker()
         stroker.setWidth(10.0)  # Genera un área de interacción invisible de 10px de ancho
         return stroker.createStroke(self.path())
+
+    def hoverEnterEvent(self, event):
+        self._hovered = True
+        self.update()
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event):
+        self._hovered = False
+        self.update()
+        super().hoverLeaveEvent(event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            parent_window = None
+            if self.scene() and self.scene().views():
+                parent_window = self.scene().views()[0].window()
+
+            # Resolver ruta del JSON de infraestructura si no se ha asignado aún
+            json_path = self.json_path
+            if not json_path and parent_window and hasattr(parent_window, "json_path"):
+                json_path = parent_window.json_path
+
+            if json_path:
+                from domain_visor.year_dialog import ConnectionRenameDialog
+                dialog = ConnectionRenameDialog(self.connection, json_path, parent_window)
+                dialog.exec()
+                if dialog.saved:
+                    # Forzar recarga de infraestructura en el árbol y re-renderizado de escena
+                    if parent_window:
+                        parent_window.load_initial_json()
+                        parent_window.trigger_render()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+    def paint(self, painter, option, widget=None):
+        if self._hovered:
+            painter.save()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+            # Dibujar el brillo/glow de fondo
+            glow_pen = QPen(self.pen())
+            glow_pen.setWidthF(self.pen().widthF() + 6.0)
+
+            color = self.pen().color()
+            glow_color = QColor(color.red(), color.green(), color.blue(), 100) # Alfa semi-transparente
+            glow_pen.setColor(glow_color)
+
+            painter.setPen(glow_pen)
+            painter.drawPath(self.path())
+            painter.restore()
+
+        super().paint(painter, option, widget)

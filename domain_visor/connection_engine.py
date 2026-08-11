@@ -12,7 +12,7 @@ class ConnectionEngine:
     def __init__(self):
         pass
 
-    def create_connections(self, scene, container, registry):
+    def create_connections(self, scene, container, registry, domains_path=None):
         """
         Itera sobre una lista de objetos Connection en el container, obtiene sus puertos (derecho e izquierdo)
         desde PortRegistry, crea los objetos gráficos CableItem correspondientes y los agrega a la escena.
@@ -74,12 +74,12 @@ class ConnectionEngine:
                         to_port = right_to
 
                 if from_port and to_port:
-                    cable = CableItem(from_port, to_port, connection, is_special=is_special)
+                    cable = CableItem(from_port, to_port, connection, is_special=is_special, json_path=domains_path)
                     scene.addItem(cable)
             else:
                 # Respaldo clásico si no se encuentran ambos lados
                 from_port = registry.get_port(connection.from_year, "right")
                 to_port = registry.get_port(connection.to_year, "left")
                 if from_port and to_port:
-                    cable = CableItem(from_port, to_port, connection)
+                    cable = CableItem(from_port, to_port, connection, json_path=domains_path)
                     scene.addItem(cable)
