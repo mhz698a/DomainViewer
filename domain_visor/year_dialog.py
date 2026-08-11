@@ -7,10 +7,10 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QLineEdit,
     QPushButton, QMessageBox, QListWidget, QListWidgetItem, QWidget,
-    QTreeView, QAbstractItemView
+    QTreeView, QAbstractItemView, QMenu
 )
-from PyQt6.QtCore import Qt, QDir, QModelIndex, QUrl
-from PyQt6.QtGui import QFileSystemModel, QDesktopServices
+from PyQt6.QtCore import Qt, QDir, QModelIndex, QUrl, QPoint
+from PyQt6.QtGui import QFileSystemModel, QDesktopServices, QAction
 from domain_visor.theme import Theme
 from domain_visor.character_manager import CharacterManager
 
@@ -349,7 +349,9 @@ class YearDialog(QDialog):
         self.year_folder_tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.year_folder_tree.setHeaderHidden(True)
         self.year_folder_tree.setMinimumWidth(260)
-        self.year_folder_tree.clicked.connect(self.open_folder_from_tree)
+        self.year_folder_tree.doubleClicked.connect(self.open_folder_from_tree)
+        self.year_folder_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.year_folder_tree.customContextMenuRequested.connect(self.show_year_folder_context_menu)
 
         self.year_folder_tree.expanded.connect(self._limit_tree_depth)
 
@@ -390,6 +392,17 @@ class YearDialog(QDialog):
         # cuando el modelo ya tiene sus columnas inicializadas.
         for column in range(1, self.year_folder_model.columnCount()):
             self.year_folder_tree.hideColumn(column)
+
+    def show_year_folder_context_menu(self, pos: QPoint):
+        index = self.year_folder_tree.indexAt(pos)
+        if not index.isValid() or not self.year_folder_model.isDir(index):
+            return
+
+        menu = QMenu(self.year_folder_tree)
+        open_action = QAction("Abrir carpeta", menu)
+        open_action.triggered.connect(lambda: self.open_folder_from_tree(index))
+        menu.addAction(open_action)
+        menu.exec(self.year_folder_tree.viewport().mapToGlobal(pos))
 
     def open_folder_from_tree(self, index: QModelIndex):
         if not index.isValid() or not self.year_folder_model.isDir(index):
