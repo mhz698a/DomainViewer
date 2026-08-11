@@ -1,6 +1,6 @@
 # domain_visor/year_item.py
 
-from PyQt6.QtCore import QRectF, Qt
+from PyQt6.QtCore import QRectF, Qt, QPointF
 from PyQt6.QtGui import QFont, QColor, QPainter, QPen, QBrush
 from PyQt6.QtWidgets import QGraphicsItem
 
@@ -19,6 +19,8 @@ class YearItem(QGraphicsItem):
     - Heredar de QGraphicsItem y asociarse jerárquicamente a su DomainItem padre.
     - Instanciar e incorporar dos puertos (PortItem) de conexión centrado en la fila del año (top 15.0px).
     - Incorporar dinámicamente el CharacterRowItem abajo de la fila de puertos y año si existen personajes.
+    - Soportar subrayado al pasar el mouse por encima del número del año y tooltip "{year} - {season_name}".
+    - Al hacer clic en el número del año, abrir el diálogo YearDialog.
     """
     # Usar una instancia de CharacterManager estática para la carga en la vista
     _char_manager = None
@@ -38,6 +40,9 @@ class YearItem(QGraphicsItem):
         self._width = float(width)
         self._height = float(height)
         self._year_value = year_value
+
+        self._year_hovered = False
+        self.setAcceptHoverEvents(True)
 
         # 1. Instanciar puertos de conexión izquierdo y derecho (siempre en la primera fila de 15.0px)
         port_diameter = 8.0
@@ -67,6 +72,74 @@ class YearItem(QGraphicsItem):
         # Retorna el área que cubre este ítem de año (coincide con la altura dinámica calculada en LayoutEngine)
         return QRectF(self._x, self._y, self._width, self._height)
 
+    def is_over_year_number(self, pos: QPointF) -> bool:
+        """
+        Determina si las coordenadas dadas están dentro de la región del número del año (fila superior de 15.0px).
+        """
+        return self._x <= pos.x() <= (self._x + self._width) and self._y <= pos.y() <= (self._y + 15.0)
+
+    def hoverEnterEvent(self, event):
+        pos = event.pos()
+        if self.is_over_year_number(pos):
+            self._year_hovered = True
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+            # Actualizar Tooltip dinámicamente
+            char_mgr = self.get_character_manager()
+            from domain_visor.year_dialog import find_season_name
+            season_name = find_season_name(self._year_value, char_mgr.base_path)
+            season_clean = season_name.replace("_", " ")
+            self.setToolTip(f"{self._year_value} - {season_clean}")
+        else:
+            self._year_hovered = False
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            self.setToolTip("")
+        self.update()
+        super().hoverEnterEvent(event)
+
+    def hoverMoveEvent(self, event):
+        pos = event.pos()
+        was_hovered = self._year_hovered
+        if self.is_over_year_number(pos):
+            self._year_hovered = True
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+            # Actualizar Tooltip dinámicamente
+            char_mgr = self.get_character_manager()
+            from domain_visor.year_dialog import find_season_name
+            season_name = find_season_name(self._year_value, char_mgr.base_path)
+            season_clean = season_name.replace("_", " ")
+            self.setToolTip(f"{self._year_value} - {season_clean}")
+        else:
+            self._year_hovered = False
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            self.setToolTip("")
+        
+        if was_hovered != self._year_hovered:
+            self.update()
+        super().hoverMoveEvent(event)
+
+    def hoverLeaveEvent(self, event):
+        self._year_hovered = False
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.setToolTip("")
+        self.update()
+        super().hoverLeaveEvent(event)
+
+    def mousePressEvent(self, event):
+        pos = event.pos()
+        if event.button() == Qt.MouseButton.LeftButton and self.is_over_year_number(pos):
+            from domain_visor.year_dialog import YearDialog
+            parent_window = None
+            if self.scene() and self.scene().views():
+                parent_window = self.scene().views()[0].window()
+            
+            dialog = YearDialog(self._year_value, parent_window)
+            dialog.exec()
+            if dialog.saved:
+                self.update()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
     def paint(self, painter, option, widget=None):
         painter.save()
 
@@ -87,6 +160,8 @@ class YearItem(QGraphicsItem):
         # 2. Dibujar el año centrado horizontalmente en la primera fila de 15.0px
         year_rect = QRectF(self._x, self._y, self._width, 15.0)
         font = QFont("Arial", 10)
+        if self._year_hovered:
+            font.setUnderline(True)
         painter.setFont(font)
         painter.setPen(QColor(Theme.TEXT_WHITE))
         painter.drawText(year_rect, Qt.AlignmentFlag.AlignCenter, str(self._year_value))
