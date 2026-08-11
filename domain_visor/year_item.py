@@ -112,7 +112,7 @@ class YearItem(QGraphicsItem):
             self._year_hovered = False
             self.setCursor(Qt.CursorShape.ArrowCursor)
             self.setToolTip("")
-
+        
         if was_hovered != self._year_hovered:
             self.update()
         super().hoverMoveEvent(event)
@@ -131,7 +131,7 @@ class YearItem(QGraphicsItem):
             parent_window = None
             if self.scene() and self.scene().views():
                 parent_window = self.scene().views()[0].window()
-
+            
             dialog = YearDialog(self._year_value, parent_window)
             dialog.exec()
             if dialog.saved:

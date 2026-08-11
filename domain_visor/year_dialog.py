@@ -263,7 +263,7 @@ class YearDialog(QDialog):
 
         # Otros paquetes ID por defecto
         main_layout.addWidget(QLabel("other_id_package_default:"))
-
+        
         self.list_other_packages = QListWidget()
         for pkg in self.year_data["other_id_package_default"]:
             self.list_other_packages.addItem(QListWidgetItem(pkg))
@@ -420,7 +420,7 @@ class ConnectionRenameDialog(QDialog):
 
         form_layout = QHBoxLayout()
         form_layout.addWidget(QLabel("Nombre del Lazo:"))
-
+        
         self.txt_name = QLineEdit(self.connection.name)
         form_layout.addWidget(self.txt_name)
         layout.addLayout(form_layout)
@@ -453,7 +453,7 @@ class ConnectionRenameDialog(QDialog):
 
     def save_data(self):
         new_name = self.txt_name.text().strip()
-
+        
         # 1. Cargar infrastructure.json
         try:
             with open(self.json_path, "r", encoding="utf-8") as f:

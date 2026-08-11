@@ -175,15 +175,15 @@ class CableItem(QGraphicsPathItem):
         if self._hovered:
             painter.save()
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
+            
             # Dibujar el brillo/glow de fondo
             glow_pen = QPen(self.pen())
             glow_pen.setWidthF(self.pen().widthF() + 6.0)
-
+            
             color = self.pen().color()
             glow_color = QColor(color.red(), color.green(), color.blue(), 100) # Alfa semi-transparente
             glow_pen.setColor(glow_color)
-
+            
             painter.setPen(glow_pen)
             painter.drawPath(self.path())
             painter.restore()
