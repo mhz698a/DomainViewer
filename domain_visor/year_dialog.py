@@ -12,7 +12,7 @@ from PyQt6.QtCore import Qt
 from domain_visor.theme import Theme
 from domain_visor.character_manager import CharacterManager
 
-def calculate_id_package_default(year: int) -> str:
+def calculate_id_package_default(year: int, infra_path: Path = None) -> str:
     """
     Calcula el ID de paquete por defecto basado en las reglas:
     - Primeros dos caracteres del último nombre del superdominio en mayúsculas.
@@ -21,9 +21,10 @@ def calculate_id_package_default(year: int) -> str:
     - "-"
     - prefix en dos dígitos: {max(0, year - 2003):02d}
     - "-"
-    - "00A" al ser default variant key
+    - "00A" al ser default variant key (se pone por defecto)
     """
-    infra_path = Path("__structure__/infrastructure.json")
+    if infra_path is None:
+        infra_path = Path("__structure__/infrastructure.json")
     if not infra_path.exists():
         return ""
     try:
@@ -33,7 +34,7 @@ def calculate_id_package_default(year: int) -> str:
         return ""
 
     for sd_data in data:
-        sd_name = sd_data.get("superdomain", "")
+        sd_name = sd_data.get("superdomain", "").strip()
         for idx, domain_data in enumerate(sd_data.get("domains", [])):
             range_text = domain_data.get("range", "")
             try:
@@ -41,18 +42,19 @@ def calculate_id_package_default(year: int) -> str:
             except Exception:
                 continue
             if start_year <= year <= end_year:
-                # 1. Prefijo del superdominio
-                parts = sd_name.split("_")
+                # 1. Prefijo del superdominio: primeros dos caracteres del último nombre
+                parts = [p for p in sd_name.split("_") if p]
                 last_part = parts[-1] if parts else ""
                 sd_prefix = last_part[:2].upper()
 
-                # 2. Índice del dominio dentro del superdominio (1-based)
+                # 2. Número del dominio dentro del superdominio (1-based index) en dos dígitos
                 domain_index = idx + 1
                 dom_index_str = f"{domain_index:02d}"
 
-                # 3. Prefix de año
+                # 3. Prefix en dos dígitos
                 prefix_str = f"{max(0, year - 2003):02d}"
 
+                # 4. Combinar con default variant key "00A"
                 return f"{sd_prefix}-{dom_index_str}-{prefix_str}-00A"
     return ""
 
@@ -170,17 +172,22 @@ class YearDialog(QDialog):
         self.json_filename = f"The_ID_Year_{self.year_value}.json"
         self.json_filepath = self.identity_dir / self.json_filename
 
+        # Intentar obtener infra_path del parent si existe
+        self.infra_path = None
+        if parent and hasattr(parent, "json_path"):
+            self.infra_path = Path(parent.json_path)
+
         # Cargar o inicializar estructura de datos
-        self.load_or_create_year_data()
+        self.load_or_create_year_data(self.infra_path)
         self.init_ui()
 
-    def load_or_create_year_data(self):
+    def load_or_create_year_data(self, infra_path=None):
         """
         Carga o crea el archivo JSON. Sincroniza campos de sólo lectura.
         """
         # Calcular los campos generados automáticamente
         self.auto_season_name = find_season_name(self.year_value, self.base_path)
-        self.auto_id_package_default = calculate_id_package_default(self.year_value)
+        self.auto_id_package_default = calculate_id_package_default(self.year_value, infra_path)
 
         exists = self.json_filepath.exists()
         loaded_data = {}
@@ -196,13 +203,16 @@ class YearDialog(QDialog):
         inner_data = loaded_data.get("year_data", {})
 
         # Crear o actualizar estructura combinando datos cargados y valores autocalculados
+        stored_id = inner_data.get("id_package_default", "")
+        final_id = self.auto_id_package_default if self.auto_id_package_default else stored_id
+
         self.year_data = {
             "year": str(self.year_value),
             "prefix": self.prefix,
             "season_name": self.auto_season_name,
             "season_abreviation": inner_data.get("season_abreviation", ""),
             "esentia_name": inner_data.get("esentia_name", ""),
-            "id_package_default": self.auto_id_package_default, # Generado automáticamente siempre
+            "id_package_default": final_id, # Generado automáticamente
             "other_id_package_default": inner_data.get("other_id_package_default", [])
         }
 
