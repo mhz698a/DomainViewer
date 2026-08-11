@@ -322,27 +322,60 @@ class YearDialog(QDialog):
         year_root = str(self.year_dir)
 
         self.year_folder_model = QFileSystemModel(self)
-        self.year_folder_model.setFilter(
-            QDir.Filter.Dirs | QDir.Filter.NoDotAndDotDot | QDir.Filter.Readable
-        )
+
+        # Filtro corregido y más permisivo para carpetas (desactivado)
+        # self.year_folder_model.setFilter(
+        #     QDir.Filter.Dirs | QDir.Filter.AllDirs | QDir.Filter.NoDotAndDotDot | QDir.Filter.Readable
+        # )
 
         self.year_folder_tree = QTreeView()
         self.year_folder_tree.setModel(self.year_folder_model)
 
-        root_index = self.year_folder_model.setRootPath(year_root)
+        # 1. Primero asignamos la ruta base
+        self.year_folder_model.setRootPath(year_root)
+
+        # 2. SOLUCIÓN: Forzamos el índice de inmediato sin esperar la señal asíncrona
+        root_index = self.year_folder_model.index(year_root)
         self.year_folder_tree.setRootIndex(root_index)
+
+        # 3. Ocultamos las columnas usando el valor por defecto de QFileSystemModel (suele ser 4)
+        for column in range(1, 4):
+            self.year_folder_tree.hideColumn(column)
+
+        # Mantenemos la señal solo para refrescos o expansiones automáticas futuras
         self.year_folder_model.directoryLoaded.connect(self._refresh_year_folder_root)
+
         self.year_folder_tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.year_folder_tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.year_folder_tree.setHeaderHidden(True)
         self.year_folder_tree.setMinimumWidth(260)
         self.year_folder_tree.clicked.connect(self.open_folder_from_tree)
 
-        for column in range(1, self.year_folder_model.columnCount()):
-            self.year_folder_tree.hideColumn(column)
+        self.year_folder_tree.expanded.connect(self._limit_tree_depth)
 
         layout.addWidget(self.year_folder_tree)
         return container
+
+    def _limit_tree_depth(self, index: QModelIndex):
+        """Evita que el usuario expanda más allá del segundo nivel."""
+        if not index.isValid():
+            return
+
+        # Calculamos la profundidad subiendo por los padres del índice
+        depth = 0
+        current_index = index
+
+        # Subimos por el árbol hasta llegar al nodo raíz visible (rootIndex)
+        root_index = self.year_folder_tree.rootIndex()
+        while current_index.isValid() and current_index != root_index:
+            current_index = current_index.parent()
+            depth += 1
+
+        # depth == 1: Primer nivel (Carpetas principales dentro del año)
+        # depth == 2: Segundo nivel (Subcarpetas)
+        # Si depth >= 2, significa que el usuario intentó expandir una subcarpeta del segundo nivel
+        if depth >= 2:
+            self.year_folder_tree.collapse(index)
 
 
     def _refresh_year_folder_root(self, path: str):
@@ -352,6 +385,11 @@ class YearDialog(QDialog):
         root_index = self.year_folder_model.index(str(self.year_dir))
         self.year_folder_tree.setRootIndex(root_index)
         self.year_folder_tree.expand(root_index)
+
+        # CORRECCIÓN: Ocultar las columnas excedentes aquí,
+        # cuando el modelo ya tiene sus columnas inicializadas.
+        for column in range(1, self.year_folder_model.columnCount()):
+            self.year_folder_tree.hideColumn(column)
 
     def open_folder_from_tree(self, index: QModelIndex):
         if not index.isValid() or not self.year_folder_model.isDir(index):
