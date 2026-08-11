@@ -127,15 +127,27 @@ class YearItem(QGraphicsItem):
     def mousePressEvent(self, event):
         pos = event.pos()
         if event.button() == Qt.MouseButton.LeftButton and self.is_over_year_number(pos):
-            from domain_visor.year_dialog import YearDialog
             parent_window = None
             if self.scene() and self.scene().views():
                 parent_window = self.scene().views()[0].window()
             
-            dialog = YearDialog(self._year_value, parent_window)
-            dialog.exec()
-            if dialog.saved:
-                self.update()
+            char_mgr = self.get_character_manager()
+            year_path = char_mgr.base_path / str(self._year_value)
+
+            if not year_path.exists():
+                from domain_visor.year_creator import trigger_year_creation
+                success = trigger_year_creation(self._year_value, parent_window, base_path=char_mgr.base_path)
+                if success:
+                    if parent_window and hasattr(parent_window, "refresh_data"):
+                        parent_window.refresh_data()
+                    else:
+                        self.update()
+            else:
+                from domain_visor.year_dialog import YearDialog
+                dialog = YearDialog(self._year_value, parent_window)
+                dialog.exec()
+                if dialog.saved:
+                    self.update()
             event.accept()
         else:
             super().mousePressEvent(event)
