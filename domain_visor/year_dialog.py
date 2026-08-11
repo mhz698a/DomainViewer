@@ -6,9 +6,11 @@ import traceback
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QLineEdit,
-    QPushButton, QMessageBox, QListWidget, QListWidgetItem, QWidget
+    QPushButton, QMessageBox, QListWidget, QListWidgetItem, QWidget,
+    QFileSystemModel, QTreeView, QAbstractItemView
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QDir, QModelIndex, QUrl
+from PyQt6.QtGui import QDesktopServices
 from domain_visor.theme import Theme
 from domain_visor.character_manager import CharacterManager
 
@@ -94,8 +96,8 @@ class YearDialog(QDialog):
 
         self.setWindowTitle(f"Year Dialog - {self.year_value}")
         self.setModal(True)
-        self.setMinimumWidth(500)
-        self.resize(550, 450)
+        self.setMinimumWidth(760)
+        self.resize(900, 500)
 
         # Quitar botón de ayuda
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
@@ -166,9 +168,10 @@ class YearDialog(QDialog):
             }}
         """)
 
-        # Definir ruta del archivo JSON
+        # Definir rutas del año y del archivo JSON
         self.prefix = f"{max(0, self.year_value - 2003):02d}"
-        self.identity_dir = self.base_path / str(self.year_value) / f"{self.prefix}. identity"
+        self.year_dir = self.base_path / str(self.year_value)
+        self.identity_dir = self.year_dir / f"{self.prefix}. identity"
         self.json_filename = f"The_ID_Year_{self.year_value}.json"
         self.json_filepath = self.identity_dir / self.json_filename
 
@@ -221,6 +224,11 @@ class YearDialog(QDialog):
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(15)
 
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(15)
+        fields_layout = QVBoxLayout()
+        fields_layout.setSpacing(15)
+
         # Grid para campos (usando claves exactas como etiquetas y traduciendo Estación a Temporada)
         grid = QGridLayout()
         grid.setSpacing(10)
@@ -259,15 +267,15 @@ class YearDialog(QDialog):
         self.txt_esentia_name = QLineEdit(self.year_data["esentia_name"])
         grid.addWidget(self.txt_esentia_name, 5, 1)
 
-        main_layout.addLayout(grid)
+        fields_layout.addLayout(grid)
 
         # Otros paquetes ID por defecto
-        main_layout.addWidget(QLabel("other_id_package_default:"))
+        fields_layout.addWidget(QLabel("other_id_package_default:"))
         
         self.list_other_packages = QListWidget()
         for pkg in self.year_data["other_id_package_default"]:
             self.list_other_packages.addItem(QListWidgetItem(pkg))
-        main_layout.addWidget(self.list_other_packages)
+        fields_layout.addWidget(self.list_other_packages)
 
         # Controles para añadir/eliminar paquetes
         add_del_layout = QHBoxLayout()
@@ -281,7 +289,11 @@ class YearDialog(QDialog):
         add_del_layout.addWidget(self.txt_new_package)
         add_del_layout.addWidget(self.btn_add_package)
         add_del_layout.addWidget(self.btn_del_package)
-        main_layout.addLayout(add_del_layout)
+        fields_layout.addLayout(add_del_layout)
+
+        content_layout.addLayout(fields_layout, 2)
+        content_layout.addWidget(self._create_year_folder_tree(), 1)
+        main_layout.addLayout(content_layout)
 
         # Footer Buttons
         footer_layout = QHBoxLayout()
@@ -295,6 +307,45 @@ class YearDialog(QDialog):
         footer_layout.addWidget(self.btn_save)
         footer_layout.addWidget(self.btn_discard)
         main_layout.addLayout(footer_layout)
+
+
+    def _create_year_folder_tree(self):
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        title = QLabel(f"Carpetas del año {self.year_value}:")
+        title.setStyleSheet("color: #85c1e9; font-size: 12px;")
+        layout.addWidget(title)
+
+        self.year_folder_model = QFileSystemModel(self)
+        self.year_folder_model.setFilter(
+            QDir.Filter.AllDirs | QDir.Filter.NoDotAndDotDot | QDir.Filter.Readable
+        )
+        self.year_folder_model.setRootPath(str(self.year_dir))
+
+        self.year_folder_tree = QTreeView()
+        self.year_folder_tree.setModel(self.year_folder_model)
+        self.year_folder_tree.setRootIndex(self.year_folder_model.index(str(self.year_dir)))
+        self.year_folder_tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.year_folder_tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.year_folder_tree.setHeaderHidden(True)
+        self.year_folder_tree.setMinimumWidth(260)
+        self.year_folder_tree.clicked.connect(self.open_folder_from_tree)
+
+        for column in range(1, self.year_folder_model.columnCount()):
+            self.year_folder_tree.hideColumn(column)
+
+        layout.addWidget(self.year_folder_tree)
+        return container
+
+    def open_folder_from_tree(self, index: QModelIndex):
+        if not index.isValid() or not self.year_folder_model.isDir(index):
+            return
+
+        folder_path = self.year_folder_model.filePath(index)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(folder_path))
 
     def add_package_item(self):
         text = self.txt_new_package.text().strip()
