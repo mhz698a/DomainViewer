@@ -2,9 +2,9 @@
 
 import os
 from pathlib import Path
-from PyQt6.QtCore import QRectF, Qt
-from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QBrush, QPixmap
-from PyQt6.QtWidgets import QGraphicsItem, QToolTip
+from PyQt6.QtCore import QRectF, Qt, QUrl
+from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QBrush, QPixmap, QDesktopServices, QAction
+from PyQt6.QtWidgets import QGraphicsItem, QToolTip, QMenu, QMessageBox
 
 from domain_visor.theme import Theme
 
@@ -68,73 +68,134 @@ class CharacterIconItem(QGraphicsItem):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            from domain_visor.character_dialog import CharacterEditDialog
-            # Encontrar el widget padre/ventana para pasarlo como parent del diálogo
+            self.view_profile_credential()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+    def contextMenuEvent(self, event):
+        view = None
+        scene = self.scene()
+        if scene:
+            views = scene.views()
+            if views:
+                view = views[0]
+
+        menu = QMenu(view)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: #1e1e1e;
+                color: {Theme.TEXT_WHITE};
+                border: 1px solid #3e3e42;
+                font-family: Arial;
+                font-size: 11px;
+            }}
+            QMenu::item {{
+                padding: 6px 20px;
+                background-color: transparent;
+            }}
+            QMenu::item:selected {{
+                background-color: #2d2d2d;
+                color: #ffffff;
+            }}
+        """)
+
+        open_folder_act = QAction("Abrir carpeta del perfil", menu)
+        open_folder_act.triggered.connect(self.open_profile_folder)
+        menu.addAction(open_folder_act)
+
+        view_credential_act = QAction("Ver credencial del perfil", menu)
+        view_credential_act.triggered.connect(self.view_profile_credential)
+        menu.addAction(view_credential_act)
+
+        if event:
+            menu.exec(event.screenPos())
+            event.accept()
+
+    def open_profile_folder(self):
+        if self.character_path and Path(self.character_path).exists():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(self.character_path).resolve())))
+        else:
             view = None
             scene = self.scene()
             if scene:
                 views = scene.views()
                 if views:
                     view = views[0]
+            msg = QMessageBox(view)
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setWindowTitle("Advertencia")
+            msg.setText(f"La carpeta del personaje no existe o está vacía:\n{self.character_path}")
+            msg.setStyleSheet(f"""
+                QMessageBox {{
+                    background-color: {Theme.APP_BACKGROUND};
+                    color: {Theme.TEXT_WHITE};
+                }}
+                QLabel {{
+                    color: {Theme.TEXT_WHITE};
+                }}
+                QPushButton {{
+                    background-color: #2d2d2d;
+                    border: 1px solid #555555;
+                    border-radius: 4px;
+                    padding: 6px 12px;
+                    color: {Theme.TEXT_WHITE};
+                    font-weight: bold;
+                }}
+            """)
+            msg.exec()
 
-            # Guardamos datos identificadores anteriores para poder ubicar y actualizar en caché correctamente
-            old_name = self.name
-            old_char_path = self.character_path
+    def view_profile_credential(self):
+        from domain_visor.character_dialog import CharacterEditDialog
+        view = None
+        scene = self.scene()
+        if scene:
+            views = scene.views()
+            if views:
+                view = views[0]
 
-            # Instanciar y mostrar el diálogo modal
-            dialog = CharacterEditDialog(self.char_data, parent=view)
-            if dialog.exec() == CharacterEditDialog.DialogCode.Accepted and dialog.saved:
-                new_data = dialog.char_data
+        old_name = self.name
+        old_char_path = self.character_path
 
-                # 1. Actualizar el diccionario char_data original (mutación inplace)
-                self.char_data.clear()
-                self.char_data.update(new_data)
+        dialog = CharacterEditDialog(self.char_data, parent=view)
+        if dialog.exec() == CharacterEditDialog.DialogCode.Accepted and dialog.saved:
+            new_data = dialog.char_data
 
-                # 2. Invalidad/Remover cache del pixmap antiguo y precargar el nuevo para este personaje
-                if self.icon_path and self.character_path:
-                    old_img_path = str(Path(self.character_path) / self.icon_path)
-                    if old_img_path in PIXMAP_CACHE:
-                        del PIXMAP_CACHE[old_img_path]
+            self.char_data.clear()
+            self.char_data.update(new_data)
 
-                # 3. Actualizar atributos y tooltip locales de este ítem
-                self.update_tooltip_and_attributes(new_data)
-                self.load_pixmap()
+            if self.icon_path and self.character_path:
+                old_img_path = str(Path(self.character_path) / self.icon_path)
+                if old_img_path in PIXMAP_CACHE:
+                    del PIXMAP_CACHE[old_img_path]
 
-                # 4. Actualizar la caché del CharacterManager
-                # Encontrar el manager que reside en el YearItem del que formamos parte
-                # O si no, podemos usar la instancia global/del año.
-                from domain_visor.year_item import YearItem
-                mgr = YearItem.get_character_manager()
-                year_str = str(new_data.get("year"))
-                if year_str in mgr._cache:
-                    # Buscar el personaje en la lista de caché por su ID/posición original o ruta y actualizarlo
-                    for idx, char in enumerate(mgr._cache[year_str]):
-                        if char.get("character_path") == old_char_path or char.get("name") == old_name:
-                            mgr._cache[year_str][idx] = new_data.copy()
-                            break
-                    mgr.save_cache_file()
+            self.update_tooltip_and_attributes(new_data)
+            self.load_pixmap()
 
-                # 5. Forzar repintado del ítem
-                self.update()
+            from domain_visor.year_item import YearItem
+            mgr = YearItem.get_character_manager()
+            year_str = str(new_data.get("year"))
+            if year_str in mgr._cache:
+                for idx, char in enumerate(mgr._cache[year_str]):
+                    if char.get("character_path") == old_char_path or char.get("name") == old_name:
+                        mgr._cache[year_str][idx] = new_data.copy()
+                        break
+                mgr.save_cache_file()
 
-                # 6. Forzar re-renderizado de toda la escena para actualizar todo (por ejemplo, si cambió el orden)
-                # Buscamos la app ventana principal
-                main_window = None
-                if view:
-                    parent_widget = view.parent()
-                    while parent_widget:
-                        from domain_visor.scene_view import VasculumApp
-                        if isinstance(parent_widget, VasculumApp):
-                            main_window = parent_widget
-                            break
-                        parent_widget = parent_widget.parent()
+            self.update()
 
-                if main_window:
-                    main_window.trigger_render()
+            main_window = None
+            if view:
+                parent_widget = view.parent()
+                while parent_widget:
+                    from domain_visor.scene_view import VasculumApp
+                    if isinstance(parent_widget, VasculumApp):
+                        main_window = parent_widget
+                        break
+                    parent_widget = parent_widget.parent()
 
-            event.accept()
-        else:
-            super().mousePressEvent(event)
+            if main_window:
+                main_window.trigger_render()
 
     def boundingRect(self) -> QRectF:
         return QRectF(0, 0, self._size, self._size)

@@ -81,6 +81,184 @@ def find_season_name(year: int, base_path: Path) -> str:
     return ""
 
 
+class FolderCreateDialog(QDialog):
+    """
+    Diálogo para crear una nueva carpeta con estilo oscuro.
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.folder_name = ""
+        self.setWindowTitle("Crear carpeta")
+        self.setModal(True)
+        self.setMinimumWidth(500)
+        self.resize(500, 150)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {Theme.APP_BACKGROUND};
+                color: {Theme.TEXT_WHITE};
+            }}
+            QLabel {{
+                color: {Theme.TEXT_WHITE};
+                font-family: Arial;
+                font-size: 12px;
+                font-weight: bold;
+            }}
+            QLineEdit {{
+                background-color: #2d2d2d;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 6px;
+                color: {Theme.TEXT_WHITE};
+                font-family: Arial;
+                font-size: 12px;
+            }}
+            QLineEdit:focus {{
+                border-color: #85c1e9;
+            }}
+            QPushButton {{
+                background-color: #2d2d2d;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 6px 14px;
+                color: {Theme.TEXT_WHITE};
+                font-family: Arial;
+                font-size: 11px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #3e3e42;
+                border-color: #85c1e9;
+            }}
+            QPushButton:pressed {{
+                background-color: #1e1e1e;
+            }}
+        """)
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
+
+        info_label = QLabel("Nombre de la nueva carpeta:")
+        layout.addWidget(info_label)
+
+        self.txt_name = QLineEdit()
+        self.txt_name.setPlaceholderText("Ejemplo: nueva_carpeta")
+        layout.addWidget(self.txt_name)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        self.btn_save = QPushButton("Aceptar")
+        self.btn_save.clicked.connect(self.on_accept)
+        self.btn_cancel = QPushButton("Cancelar")
+        self.btn_cancel.clicked.connect(self.reject)
+
+        btn_layout.addWidget(self.btn_save)
+        btn_layout.addWidget(self.btn_cancel)
+        layout.addLayout(btn_layout)
+
+    def on_accept(self):
+        name = self.txt_name.text().strip()
+        if not name:
+            QMessageBox.warning(self, "Advertencia", "El nombre de la carpeta no puede estar vacío.")
+            return
+        self.folder_name = name
+        self.accept()
+
+
+class FolderRenameDialog(QDialog):
+    """
+    Diálogo para renombrar una carpeta con estilo oscuro.
+    """
+    def __init__(self, current_name, parent=None):
+        super().__init__(parent)
+        self.folder_name = ""
+        self.setWindowTitle("Renombrar carpeta")
+        self.setModal(True)
+        self.setMinimumWidth(500)
+        self.resize(500, 150)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {Theme.APP_BACKGROUND};
+                color: {Theme.TEXT_WHITE};
+            }}
+            QLabel {{
+                color: {Theme.TEXT_WHITE};
+                font-family: Arial;
+                font-size: 12px;
+                font-weight: bold;
+            }}
+            QLineEdit {{
+                background-color: #2d2d2d;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 6px;
+                color: {Theme.TEXT_WHITE};
+                font-family: Arial;
+                font-size: 12px;
+            }}
+            QLineEdit:focus {{
+                border-color: #85c1e9;
+            }}
+            QPushButton {{
+                background-color: #2d2d2d;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 6px 14px;
+                color: {Theme.TEXT_WHITE};
+                font-family: Arial;
+                font-size: 11px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #3e3e42;
+                border-color: #85c1e9;
+            }}
+            QPushButton:pressed {{
+                background-color: #1e1e1e;
+            }}
+        """)
+        self.current_name = current_name
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
+
+        info_label = QLabel("Nuevo nombre de la carpeta:")
+        layout.addWidget(info_label)
+
+        self.txt_name = QLineEdit(self.current_name)
+        layout.addWidget(self.txt_name)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        self.btn_save = QPushButton("Aceptar")
+        self.btn_save.clicked.connect(self.on_accept)
+        self.btn_cancel = QPushButton("Cancelar")
+        self.btn_cancel.clicked.connect(self.reject)
+
+        btn_layout.addWidget(self.btn_save)
+        btn_layout.addWidget(self.btn_cancel)
+        layout.addLayout(btn_layout)
+
+    def on_accept(self):
+        name = self.txt_name.text().strip()
+        if not name:
+            QMessageBox.warning(self, "Advertencia", "El nombre de la carpeta no puede estar vacío.")
+            return
+        self.folder_name = name
+        self.accept()
+
+
 class YearDialog(QDialog):
     """
     Diálogo de Año ("Year Dialog") para visualizar y editar la estructura de identidad del año.
@@ -164,6 +342,21 @@ class YearDialog(QDialog):
             }}
             QListWidget::item:selected {{
                 background-color: #3e3e42;
+                color: #ffffff;
+            }}
+            QMenu {{
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #3e3e42;
+                font-family: Arial;
+                font-size: 12px;
+            }}
+            QMenu::item {{
+                padding: 6px 20px;
+                background-color: transparent;
+            }}
+            QMenu::item:selected {{
+                background-color: #2d2d2d;
                 color: #ffffff;
             }}
         """)
@@ -395,14 +588,217 @@ class YearDialog(QDialog):
 
     def show_year_folder_context_menu(self, pos: QPoint):
         index = self.year_folder_tree.indexAt(pos)
-        if not index.isValid() or not self.year_folder_model.isDir(index):
-            return
 
         menu = QMenu(self.year_folder_tree)
-        open_action = QAction("Abrir carpeta", menu)
-        open_action.triggered.connect(lambda: self.open_folder_from_tree(index))
-        menu.addAction(open_action)
+
+        if not index.isValid():
+            # Click derecho en espacio en blanco
+            create_action = QAction("Crear carpeta", menu)
+            create_action.triggered.connect(self.create_new_folder)
+            menu.addAction(create_action)
+        else:
+            if not self.year_folder_model.isDir(index):
+                return
+            open_action = QAction("Abrir carpeta", menu)
+            open_action.triggered.connect(lambda: self.open_folder_from_tree(index))
+            menu.addAction(open_action)
+
+            rename_action = QAction("Renombrar", menu)
+            rename_action.triggered.connect(lambda: self.rename_folder(index))
+            menu.addAction(rename_action)
+
         menu.exec(self.year_folder_tree.viewport().mapToGlobal(pos))
+
+    def rename_folder(self, index: QModelIndex):
+        if not index.isValid():
+            return
+
+        # Calcular profundidad
+        depth = 0
+        curr = index
+        root_index = self.year_folder_tree.rootIndex()
+        while curr.isValid() and curr != root_index:
+            curr = curr.parent()
+            depth += 1
+
+        full_name = self.year_folder_model.fileName(index)
+        old_path_str = self.year_folder_model.filePath(index)
+        old_path = Path(old_path_str)
+
+        if depth == 1:
+            # Primer nivel
+            prefix = ""
+            clean_name = full_name
+            if ". " in full_name:
+                parts = full_name.split(". ", 1)
+                if parts[0].isdigit() and len(parts[0]) == 2:
+                    prefix = parts[0]
+                    clean_name = parts[1]
+
+            is_season_folder = False
+            season_inside = ""
+            if clean_name.startswith("___[") and clean_name.endswith("]"):
+                is_season_folder = True
+                season_inside = clean_name[4:-1]
+
+            initial_dialog_name = season_inside if is_season_folder else clean_name
+            dialog = FolderRenameDialog(initial_dialog_name, self)
+            if dialog.exec() == QDialog.DialogCode.Accepted and dialog.folder_name:
+                new_folder_name = dialog.folder_name
+
+                if is_season_folder:
+                    # Renombrar solo para el año activo
+                    new_clean_name = f"___[{new_folder_name}]"
+                    new_full_name = f"{prefix}. {new_clean_name}" if prefix else new_clean_name
+                    new_path = old_path.parent / new_full_name
+
+                    if new_path.exists() and new_path.resolve() != old_path.resolve():
+                        msg_box = QMessageBox(self)
+                        msg_box.setIcon(QMessageBox.Icon.Warning)
+                        msg_box.setWindowTitle("Advertencia")
+                        msg_box.setText(f"La carpeta destino ya existe:\n{new_path}")
+                        msg_box.setStyleSheet(self.styleSheet())
+                        msg_box.exec()
+                        return
+
+                    try:
+                        old_path.rename(new_path)
+                    except Exception as e:
+                        msg_box = QMessageBox(self)
+                        msg_box.setIcon(QMessageBox.Icon.Critical)
+                        msg_box.setWindowTitle("Error")
+                        msg_box.setText(f"No se pudo renombrar la carpeta:\n{e}")
+                        msg_box.setStyleSheet(self.styleSheet())
+                        msg_box.exec()
+                        return
+
+                    # Actualizar season_name en credencial/identity json y en el campo de texto
+                    self.txt_season_name.setText(new_folder_name)
+                    self.year_data["season_name"] = new_folder_name
+                    self.save_credential_sync()
+                else:
+                    # Carpeta normal primer nivel
+                    # 1. Renombrar / Crear en todos los años desde el primer año de infraestructura hasta el actual
+                    first_year = self.char_manager.get_first_infrastructure_year()
+                    import datetime
+                    current_year = datetime.date.today().year
+
+                    for y in range(first_year, current_year + 1):
+                        y_prefix = f"{max(0, y - 2003):02d}"
+                        y_dir = self.base_path / str(y)
+                        if y_dir.exists():
+                            old_y_folder = y_dir / f"{y_prefix}. {clean_name}"
+                            new_y_folder = y_dir / f"{y_prefix}. {new_folder_name}"
+                            if old_y_folder.exists():
+                                if old_y_folder.resolve() != new_y_folder.resolve():
+                                    try:
+                                        old_y_folder.rename(new_y_folder)
+                                    except Exception as e:
+                                        print(f"Error renombrando carpeta {old_y_folder} a {new_y_folder}: {e}")
+                            else:
+                                # Crear nueva carpeta ya que faltaba
+                                try:
+                                    new_y_folder.mkdir(parents=True, exist_ok=True)
+                                except Exception as e:
+                                    print(f"Error creando carpeta {new_y_folder}: {e}")
+
+                    # 2. Actualizar folders.json
+                    folders_json_path = Path("__structure__/folders.json")
+                    if folders_json_path.exists():
+                        try:
+                            with open(folders_json_path, "r", encoding="utf-8") as f:
+                                folders_data = json.load(f)
+                            if isinstance(folders_data, dict):
+                                if clean_name in folders_data:
+                                    sub_list = folders_data.pop(clean_name)
+                                    folders_data[new_folder_name] = sub_list
+                                else:
+                                    folders_data[new_folder_name] = []
+                                with open(folders_json_path, "w", encoding="utf-8") as f:
+                                    json.dump(folders_data, f, indent=2, ensure_ascii=False)
+                        except Exception as e:
+                            print(f"Error actualizando folders.json: {e}")
+        elif depth == 2:
+            # Segundo nivel (subcarpeta)
+            dialog = FolderRenameDialog(full_name, self)
+            if dialog.exec() == QDialog.DialogCode.Accepted and dialog.folder_name:
+                new_folder_name = dialog.folder_name
+                new_path = old_path.parent / new_folder_name
+
+                if new_path.exists() and new_path.resolve() != old_path.resolve():
+                    msg_box = QMessageBox(self)
+                    msg_box.setIcon(QMessageBox.Icon.Warning)
+                    msg_box.setWindowTitle("Advertencia")
+                    msg_box.setText(f"La carpeta destino ya existe:\n{new_path}")
+                    msg_box.setStyleSheet(self.styleSheet())
+                    msg_box.exec()
+                    return
+
+                try:
+                    old_path.rename(new_path)
+                except Exception as e:
+                    msg_box = QMessageBox(self)
+                    msg_box.setIcon(QMessageBox.Icon.Critical)
+                    msg_box.setWindowTitle("Error")
+                    msg_box.setText(f"No se pudo renombrar la carpeta:\n{e}")
+                    msg_box.setStyleSheet(self.styleSheet())
+                    msg_box.exec()
+
+    def save_credential_sync(self):
+        try:
+            self.identity_dir.mkdir(parents=True, exist_ok=True)
+            with open(self.json_filepath, "w", encoding="utf-8") as f:
+                json.dump({"year_data": self.year_data}, f, indent=4, ensure_ascii=False)
+        except Exception as e:
+            print(f"Error guardando credencial del año sincrónicamente: {e}")
+
+    def create_new_folder(self):
+        dialog = FolderCreateDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted and dialog.folder_name:
+            folder_name = dialog.folder_name
+            # 1. Verificar si existe en el año activo
+            active_prefix = f"{max(0, self.year_value - 2003):02d}"
+            active_folder_name = f"{active_prefix}. {folder_name}"
+            active_folder_path = self.year_dir / active_folder_name
+
+            if active_folder_path.exists():
+                msg_box = QMessageBox(self)
+                msg_box.setIcon(QMessageBox.Icon.Warning)
+                msg_box.setWindowTitle("Advertencia")
+                msg_box.setText(f"La carpeta '{active_folder_name}' ya existe en el año activo {self.year_value}.")
+                msg_box.setStyleSheet(self.styleSheet())
+                msg_box.exec()
+                return
+
+            # 2. Proceder a crear la carpeta en todos los años desde el primer año de infraestructura hasta el actual
+            first_year = self.char_manager.get_first_infrastructure_year()
+            import datetime
+            current_year = datetime.date.today().year
+
+            for y in range(first_year, current_year + 1):
+                y_prefix = f"{max(0, y - 2003):02d}"
+                y_dir = self.base_path / str(y)
+                # Asegurar que la raíz del año exista antes de crear la subcarpeta
+                if y_dir.exists():
+                    target_path = y_dir / f"{y_prefix}. {folder_name}"
+                    try:
+                        target_path.mkdir(parents=True, exist_ok=True)
+                    except Exception as e:
+                        print(f"Error creando carpeta {target_path}: {e}")
+
+            # 3. Actualizar folders.json
+            folders_json_path = Path("__structure__/folders.json")
+            if folders_json_path.exists():
+                try:
+                    with open(folders_json_path, "r", encoding="utf-8") as f:
+                        folders_data = json.load(f)
+                    if isinstance(folders_data, dict):
+                        if folder_name not in folders_data:
+                            folders_data[folder_name] = []
+                            with open(folders_json_path, "w", encoding="utf-8") as f:
+                                json.dump(folders_data, f, indent=2, ensure_ascii=False)
+                except Exception as e:
+                    print(f"Error actualizando folders.json: {e}")
 
     def open_folder_from_tree(self, index: QModelIndex):
         if not index.isValid() or not self.year_folder_model.isDir(index):
