@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QDate
 from domain_visor.theme import Theme
+from domain_visor.type_underwear_editor import load_global_type_underwear, TypeUnderwearEditorDialog
 
 class CharacterEditDialog(QDialog):
     """
@@ -177,8 +178,14 @@ class CharacterEditDialog(QDialog):
         btn_bg_layout.addWidget(self.btn_open_bg)
         scroll_layout.addLayout(btn_bg_layout, 7, 2)
 
-        # 9. Type Underwear (QListWidget with checkboxes)
+        # 9. Type Underwear (QListWidget with checkboxes & Editar lista button)
         scroll_layout.addWidget(QLabel("Ropa Interior (Type Underwear):"), 8, 0)
+
+        underwear_container = QWidget()
+        underwear_layout = QVBoxLayout(underwear_container)
+        underwear_layout.setContentsMargins(0, 0, 0, 0)
+        underwear_layout.setSpacing(5)
+
         self.list_underwear = QListWidget()
         self.list_underwear.setMaximumHeight(120)
         self.list_underwear.setStyleSheet("""
@@ -202,31 +209,25 @@ class CharacterEditDialog(QDialog):
             }
         """)
 
-        underwear_options = [
-            "Boybrief", "Girlbrief Clasic Mid Low rise", "boyshort boxer",
-            "Thong", "Bikini", "Hipster", "Tanga Brief", "French Cut",
-            "Brief Slip", "Brief Mid high rise", "Pantaloons"
-        ]
+        self.btn_edit_underwear_list = QPushButton("Editar lista")
+        self.btn_edit_underwear_list.clicked.connect(self.open_underwear_list_editor)
+
+        underwear_layout.addWidget(self.list_underwear)
+        underwear_layout.addWidget(self.btn_edit_underwear_list, 0, Qt.AlignmentFlag.AlignLeft)
+
+        scroll_layout.addWidget(underwear_container, 8, 1, 1, 2)
 
         # Parse current_underwear backward-compatibly
         current_underwear = self.char_data.get("type_underwear", [])
         if isinstance(current_underwear, str):
-            selected_underwear = [current_underwear] if current_underwear else []
+            self.selected_underwear = [current_underwear] if current_underwear else []
         elif isinstance(current_underwear, list):
-            selected_underwear = current_underwear
+            self.selected_underwear = list(current_underwear)
         else:
-            selected_underwear = []
+            self.selected_underwear = []
 
-        for option in underwear_options:
-            item = QListWidgetItem(option)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            if option in selected_underwear:
-                item.setCheckState(Qt.CheckState.Checked)
-            else:
-                item.setCheckState(Qt.CheckState.Unchecked)
-            self.list_underwear.addItem(item)
-
-        scroll_layout.addWidget(self.list_underwear, 8, 1, 1, 2)
+        self.populate_underwear_list()
+        self.list_underwear.itemChanged.connect(self.on_underwear_item_changed)
 
         # 10. Short Masked Alterego
         scroll_layout.addWidget(QLabel("Short Masked Alterego:"), 9, 0)
@@ -299,6 +300,79 @@ class CharacterEditDialog(QDialog):
         footer_layout.addWidget(self.btn_save)
         footer_layout.addWidget(self.btn_discard)
         main_layout.addLayout(footer_layout)
+
+    def populate_underwear_list(self):
+        self.list_underwear.blockSignals(True)
+        self.list_underwear.clear()
+
+        global_options = load_global_type_underwear()
+
+        # 1. Agregar elementos de la lista global
+        for option in global_options:
+            item = QListWidgetItem(option)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            if option in self.selected_underwear:
+                item.setCheckState(Qt.CheckState.Checked)
+            else:
+                item.setCheckState(Qt.CheckState.Unchecked)
+            item.setData(Qt.ItemDataRole.UserRole, False)  # No es descontinuado
+            item.setData(Qt.ItemDataRole.UserRole + 1, option)  # Nombre real
+            self.list_underwear.addItem(item)
+
+        # 2. Agregar elementos del personaje que fueron descontinuados (ya no están en la lista global)
+        for option in self.selected_underwear:
+            if option not in global_options:
+                disp_text = f"{option} (Descontinuado)"
+                item = QListWidgetItem(disp_text)
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(Qt.CheckState.Checked)
+                item.setData(Qt.ItemDataRole.UserRole, True)  # Es descontinuado
+                item.setData(Qt.ItemDataRole.UserRole + 1, option)  # Nombre real
+                self.list_underwear.addItem(item)
+
+        self.list_underwear.blockSignals(False)
+
+    def open_underwear_list_editor(self):
+        # Actualizar self.selected_underwear con las selecciones actuales
+        self._update_currently_selected_underwear()
+        dlg = TypeUnderwearEditorDialog(parent=self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self.populate_underwear_list()
+
+    def _update_currently_selected_underwear(self):
+        selected = []
+        for i in range(self.list_underwear.count()):
+            item = self.list_underwear.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                real_name = item.data(Qt.ItemDataRole.UserRole + 1)
+                if real_name:
+                    selected.append(real_name)
+        self.selected_underwear = selected
+
+    def on_underwear_item_changed(self, item):
+        is_discontinued = item.data(Qt.ItemDataRole.UserRole)
+        if is_discontinued and item.checkState() == Qt.CheckState.Unchecked:
+            real_name = item.data(Qt.ItemDataRole.UserRole + 1)
+            reply = QMessageBox.question(
+                self,
+                "Elemento descontinuado",
+                f"El elemento '{real_name}' fue descontinuado. Si continúa, se eliminará del personaje.\n¿Desea eliminarlo?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                # Se elimina del personaje
+                self.list_underwear.blockSignals(True)
+                row = self.list_underwear.row(item)
+                self.list_underwear.takeItem(row)
+                self.list_underwear.blockSignals(False)
+            else:
+                # Se conserva el valor
+                self.list_underwear.blockSignals(True)
+                item.setCheckState(Qt.CheckState.Checked)
+                self.list_underwear.blockSignals(False)
+
+        self._update_currently_selected_underwear()
 
     def _replace_spaces_real_time(self, line_edit):
         text = line_edit.text()
@@ -443,11 +517,8 @@ class CharacterEditDialog(QDialog):
             original_char_path = Path(original_char_path_str) if original_char_path_str else Path()
 
             # Recolectar ropa interior seleccionada
-            selected_underwear = []
-            for i in range(self.list_underwear.count()):
-                item = self.list_underwear.item(i)
-                if item.checkState() == Qt.CheckState.Checked:
-                    selected_underwear.append(item.text())
+            self._update_currently_selected_underwear()
+            selected_underwear = self.selected_underwear
 
             # La nueva ruta de la carpeta que calculamos automáticamente
             new_char_path = Path(self.txt_char_path.text().strip())

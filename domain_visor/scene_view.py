@@ -12,6 +12,7 @@ from domain_visor.json_editor import JSONEditorPanel
 from domain_visor.character_manager import CharacterManager
 from domain_visor.progress_dialog import ProgressDialog
 from domain_visor.year_item import YearItem
+from domain_visor.about_dialog import AboutDialog
 
 class ZoomableGraphicsView(QGraphicsView):
     """
@@ -174,7 +175,7 @@ class VasculumApp(QMainWindow):
         # Conectar el botón para mostrar/ocultar el editor
         self.view.toggle_button.clicked.connect(self.toggle_json_editor)
 
-        # 7.5. Configurar barra de menú oscura "Archivo" con acción "Refresh" (F5)
+        # 7.5. Configurar barra de menú oscura "Archivo" con acción "Refresh" (F5) y "Ayuda" con "Acerca de..."
         self.menu_bar = self.menuBar()
         self.menu_bar.setStyleSheet("""
             QMenuBar {
@@ -214,11 +215,19 @@ class VasculumApp(QMainWindow):
         self.refresh_action.setShortcut(QKeySequence("F5"))
         self.refresh_action.triggered.connect(self.refresh_data)
 
+        help_menu = self.menu_bar.addMenu("Ayuda")
+        self.about_action = help_menu.addAction("Acerca de...")
+        self.about_action.triggered.connect(self.show_about_dialog)
+
         # 8. Mostrar Ventana de Progreso en Segundo Plano para Indexación de JSON/Personajes y carga de imágenes
         self.progress_dialog = ProgressDialog(self.character_manager, self)
         # Una vez que termine la indexación, realizamos el re-renderizado inicial de forma segura
         self.progress_dialog.finished.connect(self.trigger_render)
         self.progress_dialog.start_loading()
+
+    def show_about_dialog(self):
+        dlg = AboutDialog(parent=self)
+        dlg.exec()
 
     def restore_editor_visible_state(self):
         editor_visible_setting = self.settings.value("json_editor_visible")
