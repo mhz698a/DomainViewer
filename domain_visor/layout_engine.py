@@ -12,7 +12,7 @@ class LayoutEngine:
     def __init__(self, char_manager=None):
         # Constantes de márgenes y geometría del lienzo
         self.margin_left = 100.0
-        self.margin_top = 40.0
+        self.margin_top = 80.0
         self.margin_right = 100.0
         self.margin_bottom = 100.0
 
@@ -168,7 +168,23 @@ class LayoutEngine:
         total_height = self.margin_top + active_column_height + self.margin_bottom
         scene_rect = (0.0, 0.0, float(total_width), float(total_height))
 
+        # Calcular dimensiones y posición del título del contenedor (container_title_item)
+        title_str = getattr(container, "title", "")
+        try:
+            from PyQt6.QtGui import QFont, QFontMetrics
+            font = QFont("Arial", 11, QFont.Weight.Bold)
+            fm = QFontMetrics(font)
+            title_w = max(120.0, float(fm.horizontalAdvance(title_str) + 20))
+            title_h = max(28.0, float(fm.height() + 10))
+        except Exception:
+            title_w = max(120.0, float(len(title_str) * 9 + 20))
+            title_h = 30.0
+
+        title_x = (total_width - title_w) / 2.0
+        title_y = 20.0
+
         return {
+            "container_title": (title_x, title_y, title_w, title_h),
             "superdomains": superdomains_geom,
             "domains": domains_geom,
             "years": years_geom,
