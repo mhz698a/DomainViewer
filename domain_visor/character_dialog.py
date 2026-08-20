@@ -267,6 +267,18 @@ class CharacterEditDialog(QDialog):
         self.txt_profession = QLineEdit(self.char_data.get("profession_group", ""))
         scroll_layout.addWidget(self.txt_profession, 12, 1, 1, 2)
 
+        # 14. Time of Year (Combobox)
+        scroll_layout.addWidget(QLabel("Tiempo de Año (Time of Year):"), 13, 0)
+        self.cb_time_of_year = QComboBox()
+        time_options = ["", "invierno", "primavera", "verano", "otoño"]
+        self.cb_time_of_year.addItems(time_options)
+        current_time = self.char_data.get("time_of_year", "")
+        if current_time in time_options:
+            self.cb_time_of_year.setCurrentText(current_time)
+        else:
+            self.cb_time_of_year.setCurrentIndex(0)
+        scroll_layout.addWidget(self.cb_time_of_year, 13, 1, 1, 2)
+
         scroll.setWidget(scroll_content)
         main_layout.addWidget(scroll)
 
@@ -537,7 +549,8 @@ class CharacterEditDialog(QDialog):
                 "short_masked_alterego": self.txt_short_masked.text().strip(),
                 "character_path": str(new_char_path.resolve()),
                 "color_group": self.cb_color_group.currentText(),
-                "profession_group": self.txt_profession.text().strip()
+                "profession_group": self.txt_profession.text().strip(),
+                "time_of_year": self.cb_time_of_year.currentText()
             }
 
             # Validar que exista la ruta original de personaje antes de renombrar

@@ -183,7 +183,8 @@ class CharacterManager:
                                 "short_masked_alterego": "",
                                 "character_path": str(item.resolve()),
                                 "color_group": "",
-                                "profession_group": ""
+                                "profession_group": "",
+                                "time_of_year": ""
                             }
 
                             # Guardar el JSON en la carpeta

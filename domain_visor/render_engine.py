@@ -8,6 +8,7 @@ from domain_visor.connection_engine import ConnectionEngine
 from domain_visor.superdomain_item import SuperDomainItem
 from domain_visor.domain_item import DomainItem
 from domain_visor.year_item import YearItem
+from domain_visor.container_name_item import ContainerNameItem
 
 class RenderEngine:
     """
@@ -38,6 +39,12 @@ class RenderEngine:
         layout_data = self.layout_engine.calculate_layout(container)
 
         domain_items_map = {}
+
+        # 4.0. Instanciar ContainerNameItem (etiqueta del nombre de la infraestructura)
+        if "container_title" in layout_data:
+            cx, cy, cw, ch = layout_data["container_title"]
+            title_item = ContainerNameItem(cx, cy, cw, ch, container.title, container_path)
+            scene.addItem(title_item)
 
         # 4.1. Instanciar SuperDomainItems
         for sd, geom in layout_data["superdomains"].items():
