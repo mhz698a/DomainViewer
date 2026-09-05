@@ -146,22 +146,52 @@ class CharacterManager:
                             # Si la posición, edad o la fecha no son válidas, descartamos
                             continue
 
-                        # Nombre del JSON: __{name}__.json
-                        json_file = item / f"__{name}__.json"
+                        target_json = item / f"__{name}__.json"
+                        found_json_file = None
                         char_data = {}
 
-                        if json_file.exists():
-                            # Requisito 2.2: si el archivo ya existe, leemos de una vez el contenido
+                        # Buscar si existe el archivo con el nuevo nombre o algún archivo __*.json anterior
+                        if target_json.exists():
+                            found_json_file = target_json
+                        else:
+                            for sub_file in item.glob("__*.json"):
+                                if sub_file.is_file():
+                                    found_json_file = sub_file
+                                    break
+
+                        if found_json_file and found_json_file.exists():
                             try:
-                                with open(json_file, "r", encoding="utf-8") as jf:
+                                with open(found_json_file, "r", encoding="utf-8") as jf:
                                     loaded_data = json.load(jf)
                                     char_data = loaded_data.get("character_data", {})
                             except Exception:
                                 pass
 
-                        # Requisito 2.3: rellenar con los datos recolectados y lo demás en blanco
-                        # Si no existe o le faltaban campos obligatorios, inicializar
-                        if not char_data:
+                        if char_data:
+                            # Sincronizar campos de credencial con el nombre actual de la carpeta
+                            char_data["year"] = year
+                            char_data["position"] = position
+                            char_data["name"] = name
+                            char_data["alterego"] = alterego
+                            char_data["birthday"] = birthday
+                            char_data["age"] = age
+                            char_data["character_path"] = str(item.resolve())
+
+                            # Guardar en target_json
+                            try:
+                                with open(target_json, "w", encoding="utf-8") as jf:
+                                    json.dump({"character_data": char_data}, jf, indent=4, ensure_ascii=False)
+                            except Exception as e:
+                                print(f"Error guardando JSON sincronizado en personaje: {e}")
+
+                            # Si el archivo viejo tenía un nombre diferente, eliminarlo
+                            if found_json_file and found_json_file.resolve() != target_json.resolve():
+                                try:
+                                    found_json_file.unlink()
+                                except Exception as e:
+                                    print(f"Error eliminando JSON anterior: {e}")
+
+                        else:
                             # Buscar primer imagen de la carpeta del personaje
                             icon_path = ""
                             img_extensions = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
@@ -189,7 +219,7 @@ class CharacterManager:
 
                             # Guardar el JSON en la carpeta
                             try:
-                                with open(json_file, "w", encoding="utf-8") as jf:
+                                with open(target_json, "w", encoding="utf-8") as jf:
                                     json.dump({"character_data": char_data}, jf, indent=4, ensure_ascii=False)
                             except Exception as e:
                                 print(f"Error guardando JSON en personaje: {e}")
@@ -200,8 +230,8 @@ class CharacterManager:
                 print(f"Error procesando el año {year}: {e}")
 
             if characters_list:
-                # Almacenar en caché ordenados por posición
-                characters_list.sort(key=lambda c: c.get("position", 0))
+                # Almacenar en caché ordenados por posición y luego por nombre alfabéticamente
+                characters_list.sort(key=lambda c: (c.get("position", 0), c.get("name", "").lower()))
                 # Limitar a un máximo de 6 perfiles por año (requisito profiles_row_item tiene capacidad de mostrar 6 perfiles)
                 updated_cache[str(year)] = characters_list[:6]
 

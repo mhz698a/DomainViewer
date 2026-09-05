@@ -64,7 +64,9 @@ class RenderEngine:
                 height=h,
                 title=domain.name,
                 background_color=bg_color,
-                border_color=border_color
+                border_color=border_color,
+                domain_id=domain.id,
+                infrastructure_path=domains_path
             )
             scene.addItem(dom_item)
             domain_items_map[domain] = dom_item

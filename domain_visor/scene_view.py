@@ -2,7 +2,10 @@
 
 import json
 import traceback
-from PyQt6.QtWidgets import QMainWindow, QGraphicsView, QGraphicsScene, QSplitter, QPushButton, QMenuBar, QMenu
+from PyQt6.QtWidgets import (
+    QMainWindow, QGraphicsView, QGraphicsScene, QSplitter, QPushButton,
+    QMenuBar, QMenu, QSlider, QMessageBox
+)
 from PyQt6.QtCore import Qt, QSettings, QByteArray
 from PyQt6.QtGui import QBrush, QColor, QPainter, QShortcut, QKeySequence
 
@@ -16,8 +19,8 @@ from domain_visor.about_dialog import AboutDialog
 
 class ZoomableGraphicsView(QGraphicsView):
     """
-    Vista de QGraphics personalizada que soporta zoom controlado con la rueda del mouse
-    y métodos auxiliares de escala (Paso 1).
+    Vista de QGraphics personalizada que soporta zoom controlado con la rueda del mouse,
+    métodos auxiliares de escala y un deslizador (QSlider) de zoom.
     """
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -50,16 +53,66 @@ class ZoomableGraphicsView(QGraphicsView):
         """)
         self.toggle_button.adjustSize()
 
+        # Crear deslizador (QSlider) de zoom en la esquina inferior derecha
+        self.zoom_slider = QSlider(Qt.Orientation.Horizontal, self)
+        self.zoom_slider.setRange(int(self.min_zoom * 100), int(self.max_zoom * 100))
+        self.zoom_slider.setValue(int(self.zoom_factor * 100))
+        self.zoom_slider.setFixedWidth(130)
+        self.zoom_slider.setStyleSheet("""
+            QSlider::groove:horizontal {
+                border: 1px solid #555555;
+                height: 6px;
+                background: #2d2d2d;
+                margin: 2px 0;
+                border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: #85c1e9;
+                border: 1px solid #555555;
+                width: 14px;
+                height: 14px;
+                margin: -5px 0;
+                border-radius: 7px;
+            }
+            QSlider::handle:horizontal:hover {
+                background: #aed6f1;
+            }
+        """)
+        self.zoom_slider.valueChanged.connect(self._on_slider_value_changed)
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.update_button_position()
+        self.update_controls_position()
 
-    def update_button_position(self):
+    def update_controls_position(self):
+        scrollbar_height = self.horizontalScrollBar().height() if self.horizontalScrollBar().isVisible() else 0
+        scrollbar_width = self.verticalScrollBar().width() if self.verticalScrollBar().isVisible() else 0
+
         if hasattr(self, 'toggle_button') and self.toggle_button:
             x = 15
-            scrollbar_height = self.horizontalScrollBar().height() if self.horizontalScrollBar().isVisible() else 0
             y = self.height() - self.toggle_button.height() - 15 - scrollbar_height
             self.toggle_button.move(x, y)
+
+        if hasattr(self, 'zoom_slider') and self.zoom_slider:
+            x = self.width() - self.zoom_slider.width() - 15 - scrollbar_width
+            y = self.height() - self.zoom_slider.height() - 15 - scrollbar_height
+            self.zoom_slider.move(x, y)
+
+    def update_button_position(self):
+        self.update_controls_position()
+
+    def _on_slider_value_changed(self, value):
+        target_zoom = value / 100.0
+        if self.zoom_factor != target_zoom:
+            relative_factor = target_zoom / self.zoom_factor
+            self.scale(relative_factor, relative_factor)
+            self.zoom_factor = target_zoom
+
+    def _sync_slider(self):
+        if hasattr(self, 'zoom_slider') and self.zoom_slider:
+            self.zoom_slider.blockSignals(True)
+            self.zoom_slider.setValue(int(self.zoom_factor * 100))
+            self.zoom_slider.blockSignals(False)
 
     def wheelEvent(self, event):
         angle_delta = event.angleDelta().y()
@@ -74,6 +127,7 @@ class ZoomableGraphicsView(QGraphicsView):
             relative_factor = new_zoom / self.zoom_factor
             self.scale(relative_factor, relative_factor)
             self.zoom_factor = new_zoom
+            self._sync_slider()
             event.accept()
         else:
             super().wheelEvent(event)
@@ -84,6 +138,7 @@ class ZoomableGraphicsView(QGraphicsView):
             relative_factor = new_zoom / self.zoom_factor
             self.scale(relative_factor, relative_factor)
             self.zoom_factor = new_zoom
+            self._sync_slider()
 
     def zoom_out(self):
         new_zoom = self.zoom_factor / 1.15
@@ -91,12 +146,14 @@ class ZoomableGraphicsView(QGraphicsView):
             relative_factor = new_zoom / self.zoom_factor
             self.scale(relative_factor, relative_factor)
             self.zoom_factor = new_zoom
+            self._sync_slider()
 
     def zoom_reset(self):
         if self.zoom_factor != 1.0:
             relative_factor = 1.0 / self.zoom_factor
             self.scale(relative_factor, relative_factor)
             self.zoom_factor = 1.0
+            self._sync_slider()
 
 
 class VasculumApp(QMainWindow):
@@ -175,7 +232,7 @@ class VasculumApp(QMainWindow):
         # Conectar el botón para mostrar/ocultar el editor
         self.view.toggle_button.clicked.connect(self.toggle_json_editor)
 
-        # 7.5. Configurar barra de menú oscura "Archivo" con acción "Refresh" (F5) y "Ayuda" con "Acerca de..."
+        # 7.5. Configurar barra de menú oscura "Archivo" y "Ayuda"
         self.menu_bar = self.menuBar()
         self.menu_bar.setStyleSheet("""
             QMenuBar {
@@ -215,6 +272,9 @@ class VasculumApp(QMainWindow):
         self.refresh_action.setShortcut(QKeySequence("F5"))
         self.refresh_action.triggered.connect(self.refresh_data)
 
+        self.regen_cache_action = file_menu.addAction("Regenerar caché y recargar renderizado")
+        self.regen_cache_action.triggered.connect(self.confirm_and_regenerate_cache)
+
         help_menu = self.menu_bar.addMenu("Ayuda")
         self.about_action = help_menu.addAction("Acerca de...")
         self.about_action.triggered.connect(self.show_about_dialog)
@@ -224,6 +284,42 @@ class VasculumApp(QMainWindow):
         # Una vez que termine la indexación, realizamos el re-renderizado inicial de forma segura
         self.progress_dialog.finished.connect(self.trigger_render)
         self.progress_dialog.start_loading()
+
+    def confirm_and_regenerate_cache(self):
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Regenerar caché")
+        msg_box.setText("¿Desea continuar con la regeneración de la caché y recargar el renderizado?")
+        msg_box.setIcon(QMessageBox.Icon.Question)
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msg_box.setDefaultButton(QMessageBox.StandardButton.No)
+        msg_box.setStyleSheet(f"""
+            QMessageBox {{
+                background-color: {Theme.APP_BACKGROUND};
+                color: {Theme.TEXT_WHITE};
+            }}
+            QLabel {{
+                color: {Theme.TEXT_WHITE};
+                font-family: Arial;
+                font-size: 11px;
+            }}
+            QPushButton {{
+                background-color: #2d2d2d;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 6px 14px;
+                color: {Theme.TEXT_WHITE};
+                font-family: Arial;
+                font-size: 11px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #3e3e42;
+                border-color: #85c1e9;
+            }}
+        """)
+        reply = msg_box.exec()
+        if reply == QMessageBox.StandardButton.Yes:
+            self.refresh_data()
 
     def show_about_dialog(self):
         dlg = AboutDialog(parent=self)
