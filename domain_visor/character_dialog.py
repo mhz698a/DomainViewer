@@ -434,9 +434,9 @@ class CharacterEditDialog(QDialog):
     # Métodos de ayuda para los selectores y apertura de archivos
 
     def get_start_directory(self) -> str:
-        char_path = self.current_character_path
-        if char_path and Path(char_path).exists():
-            return str(char_path)
+        for char_path in (Path(self.current_character_path), self.initial_character_path):
+            if char_path.is_dir():
+                return str(char_path)
         return str(Path.cwd())
 
     def set_icon_file(self):
@@ -446,15 +446,20 @@ class CharacterEditDialog(QDialog):
             "Imágenes (*.png *.jpg *.jpeg *.webp *.gif *.bmp);;Todos los archivos (*)"
         )
         if filepath:
-            # Intentar convertir la ruta a relativa del directorio de personaje
-            char_path = Path(self.current_character_path)
-            try:
-                rel_path = Path(filepath).resolve().relative_to(char_path.resolve())
-                self.txt_icon_path.setText(rel_path.as_posix())
-            except ValueError:
-                # Los recursos externos se guardan como rutas absolutas para no
-                # confundirlos con archivos ubicados junto al JSON.
-                self.txt_icon_path.setText(str(Path(filepath).resolve()))
+            selected_path = Path(filepath).resolve()
+            relative_path = None
+            for char_path in (self.initial_character_path, Path(self.current_character_path)):
+                try:
+                    relative_path = selected_path.relative_to(char_path.resolve())
+                    break
+                except ValueError:
+                    continue
+
+            if relative_path is not None:
+                self.txt_icon_path.setText(relative_path.as_posix())
+            else:
+                # Los recursos externos se guardan como rutas absolutas.
+                self.txt_icon_path.setText(str(selected_path))
 
     def _open_file_cross_platform(self, path):
         import sys
@@ -485,7 +490,14 @@ class CharacterEditDialog(QDialog):
         asset_path = Path(raw_path).expanduser()
         if asset_path.is_absolute():
             return asset_path
-        return Path(self.current_character_path) / asset_path
+
+        current_candidate = Path(self.current_character_path) / asset_path
+        if current_candidate.exists():
+            return current_candidate
+
+        # Antes de guardar, los recursos relativos siguen físicamente en la
+        # carpeta original, incluso cuando el nombre nuevo aún no existe.
+        return self.initial_character_path / asset_path
 
     def open_icon_file(self):
         icon_path = self.txt_icon_path.text().strip()
@@ -502,12 +514,19 @@ class CharacterEditDialog(QDialog):
             "Imágenes (*.png *.jpg *.jpeg *.webp *.gif *.bmp);;Todos los archivos (*)"
         )
         if filepath:
-            char_path = Path(self.current_character_path)
-            try:
-                rel_path = Path(filepath).resolve().relative_to(char_path.resolve())
-                self.txt_bg_path.setText(rel_path.as_posix())
-            except ValueError:
-                self.txt_bg_path.setText(str(Path(filepath).resolve()))
+            selected_path = Path(filepath).resolve()
+            relative_path = None
+            for char_path in (self.initial_character_path, Path(self.current_character_path)):
+                try:
+                    relative_path = selected_path.relative_to(char_path.resolve())
+                    break
+                except ValueError:
+                    continue
+
+            if relative_path is not None:
+                self.txt_bg_path.setText(relative_path.as_posix())
+            else:
+                self.txt_bg_path.setText(str(selected_path))
 
     def open_bg_file(self):
         bg_path = self.txt_bg_path.text().strip()
