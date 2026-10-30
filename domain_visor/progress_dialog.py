@@ -3,8 +3,6 @@
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QProgressBar
 from PyQt6.QtCore import QThread, pyqtSignal, QObject, Qt
 from PyQt6.QtGui import QPixmap
-import json
-import datetime
 import pathlib
 from domain_visor.theme import Theme
 from domain_visor.character_row_item import PIXMAP_CACHE, resolve_character_icon_path
