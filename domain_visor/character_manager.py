@@ -176,6 +176,8 @@ class CharacterManager:
                             char_data["birthday"] = birthday
                             char_data["age"] = age
                             char_data["character_path"] = str(item.resolve())
+                            # La ruta real se obtiene del JSON detectado durante el escaneo.
+                            char_data["character_json_path"] = str(target_json.resolve())
 
                             # Guardar en target_json
                             try:
@@ -212,6 +214,7 @@ class CharacterManager:
                                 "type_underwear": [],
                                 "short_masked_alterego": "",
                                 "character_path": str(item.resolve()),
+                                "character_json_path": str(target_json.resolve()),
                                 "color_group": "",
                                 "profession_group": "",
                                 "time_of_year": ""
