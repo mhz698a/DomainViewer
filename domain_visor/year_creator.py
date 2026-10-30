@@ -118,7 +118,7 @@ def validate_date_constraints(clicked_year: int, today_date=None) -> tuple[bool,
     current_month = today_date.month
 
     if clicked_year < current_year:
-        return False, f"No se puede crear una carpeta para el año {clicked_year} ya que es un año anterior."
+        return False, f"No se puede crear una carpeta para el año {clicked_year} ya que es un año anterior. Si hay un error revisela."
 
     if clicked_year == current_year:
         return True, ""
@@ -130,7 +130,7 @@ def validate_date_constraints(clicked_year: int, today_date=None) -> tuple[bool,
             return False, "Este año que intentas acceder aun no ocurre, espera a diciembre de este año para poder crearlo"
 
     if clicked_year > current_year + 1:
-        return False, "Este año falta mucho para que sucede y no se puede crear hasta la próxima"
+        return False, f"El año {clicked_year} falta mucho para que llegue y no puedes crearlo porque requiere {current_year - 1}"
 
     return False, "Fecha o año no válido para la creación."
 
