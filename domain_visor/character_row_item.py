@@ -65,7 +65,6 @@ class CharacterIconItem(QGraphicsItem):
         self.name = char_data.get("name", "")
         self.alterego = char_data.get("alterego", "")
         self.icon_path = char_data.get("icon_path", "")
-        self.character_path = char_data.get("character_path", "")
         self.character_json_path = char_data.get("character_json_path", "")
 
         formatted_name = self.name.replace("_", " ").strip().title()
