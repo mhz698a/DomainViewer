@@ -150,7 +150,7 @@ class CharacterIconItem(QGraphicsItem):
         msg = QMessageBox(view)
         msg.setIcon(QMessageBox.Icon.Warning)
         msg.setWindowTitle("Advertencia")
-        msg.setText(f"No se encontró la ubicación de la credencial:\\n{json_path_str}")
+        msg.setText(f"No se encontró la ubicación de la credencial:\n{json_path_str}")
         msg.setStyleSheet(f"""
             QMessageBox {{
                 background-color: {Theme.APP_BACKGROUND};
