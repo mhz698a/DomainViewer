@@ -7,7 +7,7 @@ import json
 import datetime
 import pathlib
 from domain_visor.theme import Theme
-from domain_visor.character_row_item import PIXMAP_CACHE
+from domain_visor.character_row_item import PIXMAP_CACHE, resolve_character_icon_path
 
 class ScanWorker(QObject):
     """
@@ -22,167 +22,66 @@ class ScanWorker(QObject):
         super().__init__()
         self.character_manager = character_manager
 
+    def _report_scan_progress(self, completed, total, year):
+        self.status_msg.emit(f"Indexando directorio del año {year}...")
+        percentage = 10 + int(completed / max(total, 1) * 60)
+        self.progress.emit(percentage)
+
     def run(self):
-        # 1. Obtener los años a procesar para poder emitir progreso detallado
-        first_year = self.character_manager.get_first_infrastructure_year()
-        current_year = datetime.date.today().year
-        years = list(range(first_year, current_year + 1))
+        try:
+            self.status_msg.emit("Iniciando verificación de credenciales...")
+            self.progress.emit(0)
 
-        # Fases de progreso:
-        # Fase 1: Verificación de caché inicial (10% de peso)
-        # Fase 2: Escaneo de carpetas e indexación (60% de peso)
-        # Fase 3: Precarga de imágenes de perfiles detectados (30% de peso)
+            # Migra las cachés heredadas antes de escanear. La ubicación del JSON
+            # será la única referencia persistente para resolver los recursos.
+            self.character_manager.migrate_cached_characters()
+            self.progress.emit(10)
 
-        self.status_msg.emit("Iniciando verificación de caché existente...")
-        self.progress.emit(0)
+            if self.character_manager.base_path.exists():
+                self.character_manager.scan_all_years(
+                    progress_callback=self._report_scan_progress
+                )
+            else:
+                self.status_msg.emit(
+                    f"Advertencia: No existe {self.character_manager.base_path}. "
+                    "Se utilizarán las credenciales que ya estén en caché."
+                )
 
-        # Fase 1: Verificación de caché existente
-        if not self.character_manager.TRUST_CACHE:
-            dirty = False
-            years_to_check = list(self.character_manager._cache.keys())
-            for idx, year_str in enumerate(years_to_check):
-                valid_chars = []
-                for char in self.character_manager._cache[year_str]:
-                    char_path_str = char.get("character_path", "")
-                    if char_path_str and pathlib.Path(char_path_str).exists():
-                        valid_chars.append(char)
-                    else:
-                        dirty = True
-                if len(valid_chars) != len(self.character_manager._cache[year_str]):
-                    self.character_manager._cache[year_str] = valid_chars
-                    dirty = True
-            if dirty:
-                self.character_manager.save_cache_file()
+            # Fase 3: precargar exactamente las mismas rutas que utilizará el visor.
+            all_chars = []
+            for characters in self.character_manager._cache.values():
+                for char in characters:
+                    if char.get("icon_path") and char.get("character_json_path"):
+                        all_chars.append(char)
 
-        self.progress.emit(10)
+            total_imgs = len(all_chars)
+            for index, char in enumerate(all_chars, start=1):
+                self.status_msg.emit(
+                    f"Cargando imagen de {char.get('name', 'personaje')} "
+                    f"({index}/{total_imgs})..."
+                )
+                full_img_path = resolve_character_icon_path(char)
 
-        # Fase 2: Escaneo de carpetas e indexación
-        if not self.character_manager.base_path.exists():
-            self.status_msg.emit(f"Advertencia: No existe {self.character_manager.base_path}")
+                if full_img_path and full_img_path not in PIXMAP_CACHE:
+                    try:
+                        if pathlib.Path(full_img_path).is_file():
+                            PIXMAP_CACHE[full_img_path] = QPixmap(full_img_path)
+                    except Exception as exc:
+                        print(
+                            f"No se pudo precargar la imagen de "
+                            f"{char.get('name', 'personaje')}: {exc}"
+                        )
+
+                self.progress.emit(70 + int(index / max(total_imgs, 1) * 30))
+
             self.progress.emit(100)
+            self.status_msg.emit("¡Procesamiento e indexación completa!")
+        except Exception as exc:
+            self.status_msg.emit(f"Error durante la indexación: {exc}")
+            self.progress.emit(100)
+            print(f"Error durante el escaneo de personajes: {exc}")
+        finally:
             self.finished.emit()
-            return
-
-        updated_cache = {}
-        total_scan_steps = len(years)
-        for idx, year in enumerate(years):
-            self.status_msg.emit(f"Indexando directorio del año {year}...")
-
-            album_prefix = f"{max(0, year - 2003):02d}"
-            year_dir = self.character_manager.base_path / str(year) / f"{album_prefix}. album"
-
-            if year_dir.exists():
-                characters_list = []
-                try:
-                    for item in year_dir.iterdir():
-                        if item.is_dir():
-                            folder_name = item.name
-                            prefix_to_check = f"{album_prefix}. "
-                            if not folder_name.startswith(prefix_to_check):
-                                continue
-
-                            rest = folder_name[len(prefix_to_check):]
-                            if rest.count(";") != 4:
-                                continue
-
-                            parts = rest.split(";")
-                            raw_pos, alterego, name, birthday, raw_age = parts
-
-                            try:
-                                position = int(raw_pos)
-                                age = int(raw_age)
-                                datetime.datetime.strptime(birthday, "%Y-%m-%d")
-                            except ValueError:
-                                continue
-
-                            json_file = item / f"__{name}__.json"
-                            char_data = {}
-
-                            if json_file.exists():
-                                try:
-                                    with open(json_file, "r", encoding="utf-8") as jf:
-                                        loaded_data = json.load(jf)
-                                        char_data = loaded_data.get("character_data", {})
-                                except Exception:
-                                    pass
-
-                            if not char_data:
-                                icon_path = ""
-                                img_extensions = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
-                                for sub_item in sorted(item.iterdir()):
-                                    if sub_item.is_file() and sub_item.suffix.lower() in img_extensions:
-                                        icon_path = sub_item.name
-                                        break
-
-                                char_data = {
-                                    "year": year,
-                                    "position": position,
-                                    "name": name,
-                                    "alterego": alterego,
-                                    "birthday": birthday,
-                                    "age": age,
-                                    "icon_path": icon_path,
-                                    "background_path": "",
-                                    "type_underwear": [],
-                                    "short_masked_alterego": "",
-                                    "character_path": str(item.resolve()),
-                                    "color_group": "",
-                                    "profession_group": "",
-                                    "time_of_year": ""
-                                }
-
-                                try:
-                                    with open(json_file, "w", encoding="utf-8") as jf:
-                                        json.dump({"character_data": char_data}, jf, indent=4, ensure_ascii=False)
-                                except Exception:
-                                    pass
-
-                            characters_list.append(char_data)
-                except Exception:
-                    pass
-
-                if characters_list:
-                    characters_list.sort(key=lambda c: c.get("position", 0))
-                    updated_cache[str(year)] = characters_list[:6]
-
-            # Calcular progreso de la Fase 2 (rango 10% a 70%)
-            scan_progress = 10 + int((idx + 1) / total_scan_steps * 60)
-            self.progress.emit(scan_progress)
-
-        # Actualizar la caché local en memoria
-        self.character_manager._cache.update(updated_cache)
-        self.character_manager.save_cache_file()
-
-        # Fase 3: Precarga y Renderizado Preparatorio de Imágenes de Perfiles en la Caché
-        # Recorremos la caché completa para decodificar todas las imágenes en QPixmap y guardarlas en PIXMAP_CACHE
-        all_chars = []
-        for y_str in self.character_manager._cache:
-            for char in self.character_manager._cache[y_str]:
-                if char.get("icon_path") and char.get("character_path"):
-                    all_chars.append(char)
-
-        total_imgs = len(all_chars)
-        if total_imgs > 0:
-            for i, char in enumerate(all_chars):
-                self.status_msg.emit(f"Cargando y renderizando imagen de {char.get('name', 'personaje')} ({i+1}/{total_imgs})...")
-                full_img_path = str(pathlib.Path(char["character_path"]) / char["icon_path"])
-
-                # Decodificar de forma no bloqueante en el hilo de trabajo
-                if full_img_path not in PIXMAP_CACHE:
-                    if pathlib.Path(full_img_path).exists():
-                        # Cargar el QPixmap de manera directa
-                        # (La manipulación e instanciación de QPixmap en hilos secundarios es segura en PyQt6 siempre que no se pinte en widgets de la interfaz principal de inmediato)
-                        pix = QPixmap(full_img_path)
-                        PIXMAP_CACHE[full_img_path] = pix
-
-                # Calcular progreso de la Fase 3 (rango 70% a 100%)
-                img_progress = 70 + int((i + 1) / total_imgs * 30)
-                self.progress.emit(img_progress)
-        else:
-            self.progress.emit(100)
-
-        self.status_msg.emit("¡Procesamiento e indexación completa!")
-        self.finished.emit()
 
 
 class ProgressDialog(QDialog):
