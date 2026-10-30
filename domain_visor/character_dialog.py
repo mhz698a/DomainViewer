@@ -499,6 +499,22 @@ class CharacterEditDialog(QDialog):
         # carpeta original, incluso cuando el nombre nuevo aún no existe.
         return self.initial_character_path / asset_path
 
+    def _serialize_asset_path(self, raw_path):
+        """Mantiene relativa la ruta de recursos que se moverá junto al personaje."""
+        raw_path = str(raw_path).strip()
+        if not raw_path:
+            return ""
+
+        asset_path = Path(raw_path).expanduser()
+        if not asset_path.is_absolute():
+            return raw_path
+
+        try:
+            return asset_path.resolve().relative_to(self.initial_character_path.resolve()).as_posix()
+        except ValueError:
+            # Los recursos externos deben conservar su ruta absoluta.
+            return str(asset_path.resolve())
+
     def open_icon_file(self):
         icon_path = self.txt_icon_path.text().strip()
         full_path = self._resolve_asset_path(icon_path) if icon_path else Path()
@@ -588,8 +604,8 @@ class CharacterEditDialog(QDialog):
                 "alterego": self.txt_alterego.text().strip(),
                 "birthday": self.txt_birthday.date().toString("yyyy-MM-dd"),
                 "age": age,
-                "icon_path": self.txt_icon_path.text().strip(),
-                "background_path": self.txt_bg_path.text().strip(),
+                "icon_path": self._serialize_asset_path(self.txt_icon_path.text()),
+                "background_path": self._serialize_asset_path(self.txt_bg_path.text()),
                 "type_underwear": selected_underwear,
                 "short_masked_alterego": self.txt_short_masked.text().strip(),
                 # Se calcula con la carpeta destino y el nombre del JSON que se guardará.
