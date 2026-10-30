@@ -548,6 +548,8 @@ class CharacterEditDialog(QDialog):
                 "type_underwear": selected_underwear,
                 "short_masked_alterego": self.txt_short_masked.text().strip(),
                 "character_path": str(new_char_path.resolve()),
+                # Se calcula con la carpeta destino y el nombre del JSON que se guardará.
+                "character_json_path": str((new_char_path / f"__{new_name}__.json").resolve()),
                 "color_group": self.cb_color_group.currentText(),
                 "profession_group": self.txt_profession.text().strip(),
                 "time_of_year": self.cb_time_of_year.currentText()
