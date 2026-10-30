@@ -26,6 +26,7 @@ class CharacterIconItem(QGraphicsItem):
         self.alterego = char_data.get("alterego", "")
         self.icon_path = char_data.get("icon_path", "")
         self.character_path = char_data.get("character_path", "")
+        self.character_json_path = char_data.get("character_json_path", "")
 
         # Formatear el Tooltip (requisito 5): "{name} - {alterego}"
         # Transformación nombre propio (Title Case) y sin guiones bajos
@@ -43,6 +44,7 @@ class CharacterIconItem(QGraphicsItem):
         self.alterego = char_data.get("alterego", "")
         self.icon_path = char_data.get("icon_path", "")
         self.character_path = char_data.get("character_path", "")
+        self.character_json_path = char_data.get("character_json_path", "")
 
         formatted_name = self.name.replace("_", " ").strip().title()
         formatted_alterego = self.alterego.replace("_", " ").strip().title()
@@ -57,8 +59,11 @@ class CharacterIconItem(QGraphicsItem):
 
     def load_pixmap(self):
         self.pixmap = None
-        if self.icon_path and self.character_path:
-            full_img_path = str(Path(self.character_path) / self.icon_path)
+        if self.icon_path and self.character_json_path:
+            # Resolver la imagen desde la ubicación del JSON detectado, no desde
+            # character_path, cuyo valor guardado puede quedar desactualizado.
+            json_directory = Path(self.character_json_path).parent
+            full_img_path = str(json_directory / self.icon_path)
             if full_img_path in PIXMAP_CACHE:
                 self.pixmap = PIXMAP_CACHE[full_img_path]
             else:
@@ -164,8 +169,9 @@ class CharacterIconItem(QGraphicsItem):
             self.char_data.clear()
             self.char_data.update(new_data)
 
-            if self.icon_path and self.character_path:
-                old_img_path = str(Path(self.character_path) / self.icon_path)
+            old_character_json_path = self.character_json_path
+            if self.icon_path and old_character_json_path:
+                old_img_path = str(Path(old_character_json_path).parent / self.icon_path)
                 if old_img_path in PIXMAP_CACHE:
                     del PIXMAP_CACHE[old_img_path]
 
