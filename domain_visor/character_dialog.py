@@ -89,9 +89,23 @@ class CharacterEditDialog(QDialog):
             }}
         """)
 
-        # Parsear ruta inicial de carpeta, directorio padre y prefijo de álbum
-        self.initial_character_path = Path(self.char_data.get("character_path", ""))
+        # La ubicación de la credencial determina la carpeta del personaje.
+        json_path_str = self.char_data.get("character_json_path", "")
+        if json_path_str:
+            self.initial_character_json_path = Path(json_path_str)
+        else:
+            # Compatibilidad con JSON/cachés anteriores que aún contienen character_path.
+            legacy_dir = Path(self.char_data.get("character_path", ""))
+            expected_json = legacy_dir / f"__{self.char_data.get('name', '')}__.json"
+            if expected_json.is_file():
+                self.initial_character_json_path = expected_json
+            else:
+                legacy_jsons = sorted(legacy_dir.glob("__*.json")) if legacy_dir.is_dir() else []
+                self.initial_character_json_path = legacy_jsons[0] if legacy_jsons else expected_json
+
+        self.initial_character_path = self.initial_character_json_path.parent
         self.parent_dir = self.initial_character_path.parent
+        self.current_character_path = self.initial_character_path
         self.album_prefix = f"{max(0, self.char_data.get('year', 2004) - 2003):02d}"
 
         self.init_ui()
@@ -234,20 +248,10 @@ class CharacterEditDialog(QDialog):
         self.txt_short_masked = QLineEdit(self.char_data.get("short_masked_alterego", ""))
         scroll_layout.addWidget(self.txt_short_masked, 9, 1, 1, 2)
 
-        # 11. Character Path (Readonly, no choose button, auto updated)
-        scroll_layout.addWidget(QLabel("Ruta Personaje (Char Path):"), 10, 0)
-        self.txt_char_path = QLineEdit(self.char_data.get("character_path", ""))
-        self.txt_char_path.setReadOnly(True)
-        scroll_layout.addWidget(self.txt_char_path, 10, 1)
-
-        btn_char_layout = QHBoxLayout()
-        self.btn_open_char = QPushButton("Abrir")
-        self.btn_open_char.clicked.connect(self.open_char_dir)
-        btn_char_layout.addWidget(self.btn_open_char)
-        scroll_layout.addLayout(btn_char_layout, 10, 2)
+        # La ruta de la carpeta se deriva internamente de character_json_path y no se muestra.
 
         # 12. Color Group (Combobox)
-        scroll_layout.addWidget(QLabel("Grupo Color (Color Group):"), 11, 0)
+        scroll_layout.addWidget(QLabel("Grupo Color (Color Group):"), 10, 0)
         self.cb_color_group = QComboBox()
         color_options = [
             "", "rojo", "azul", "verde", "amarillo", "naranja", "morado",
@@ -260,15 +264,15 @@ class CharacterEditDialog(QDialog):
             self.cb_color_group.setCurrentText(current_color)
         else:
             self.cb_color_group.setCurrentIndex(0)
-        scroll_layout.addWidget(self.cb_color_group, 11, 1, 1, 2)
+        scroll_layout.addWidget(self.cb_color_group, 10, 1, 1, 2)
 
         # 13. Profession Group
-        scroll_layout.addWidget(QLabel("Grupo Profesión (Profession):"), 12, 0)
+        scroll_layout.addWidget(QLabel("Grupo Profesión (Profession):"), 11, 0)
         self.txt_profession = QLineEdit(self.char_data.get("profession_group", ""))
-        scroll_layout.addWidget(self.txt_profession, 12, 1, 1, 2)
+        scroll_layout.addWidget(self.txt_profession, 11, 1, 1, 2)
 
         # 14. Time of Year (Combobox)
-        scroll_layout.addWidget(QLabel("Tiempo de Año (Time of Year):"), 13, 0)
+        scroll_layout.addWidget(QLabel("Tiempo de Año (Time of Year):"), 12, 0)
         self.cb_time_of_year = QComboBox()
         time_options = ["", "invierno", "primavera", "verano", "otoño"]
         self.cb_time_of_year.addItems(time_options)
@@ -277,7 +281,7 @@ class CharacterEditDialog(QDialog):
             self.cb_time_of_year.setCurrentText(current_time)
         else:
             self.cb_time_of_year.setCurrentIndex(0)
-        scroll_layout.addWidget(self.cb_time_of_year, 13, 1, 1, 2)
+        scroll_layout.addWidget(self.cb_time_of_year, 12, 1, 1, 2)
 
         scroll.setWidget(scroll_content)
         main_layout.addWidget(scroll)
@@ -302,6 +306,11 @@ class CharacterEditDialog(QDialog):
 
         # Footer Buttons
         footer_layout = QHBoxLayout()
+
+        self.btn_open_credential_location = QPushButton("Abrir ubicacion de credencial")
+        self.btn_open_credential_location.clicked.connect(self.open_credential_location)
+        footer_layout.addWidget(self.btn_open_credential_location)
+
         footer_layout.addStretch()
 
         self.btn_save = QPushButton("Guardar")
@@ -420,14 +429,14 @@ class CharacterEditDialog(QDialog):
         folder_name = f"{self.album_prefix}. {pos_str};{alterego_str};{name_str};{birthday_str};{age_str}"
         new_path = self.parent_dir / folder_name
 
-        self.txt_char_path.setText(str(new_path.resolve()))
+        self.current_character_path = new_path.resolve()
 
     # Métodos de ayuda para los selectores y apertura de archivos
 
     def get_start_directory(self) -> str:
-        char_path = self.txt_char_path.text().strip()
-        if char_path and Path(char_path).exists():
-            return char_path
+        for char_path in (Path(self.current_character_path), self.initial_character_path):
+            if char_path.is_dir():
+                return str(char_path)
         return str(Path.cwd())
 
     def set_icon_file(self):
@@ -437,16 +446,20 @@ class CharacterEditDialog(QDialog):
             "Imágenes (*.png *.jpg *.jpeg *.webp *.gif *.bmp);;Todos los archivos (*)"
         )
         if filepath:
-            # Intentar convertir la ruta a relativa del directorio de personaje
-            char_path = self.txt_char_path.text().strip()
-            if char_path:
+            selected_path = Path(filepath).resolve()
+            relative_path = None
+            for char_path in (self.initial_character_path, Path(self.current_character_path)):
                 try:
-                    rel_path = Path(filepath).relative_to(Path(char_path))
-                    self.txt_icon_path.setText(rel_path.as_posix())
+                    relative_path = selected_path.relative_to(char_path.resolve())
+                    break
                 except ValueError:
-                    self.txt_icon_path.setText(Path(filepath).name)
+                    continue
+
+            if relative_path is not None:
+                self.txt_icon_path.setText(relative_path.as_posix())
             else:
-                self.txt_icon_path.setText(Path(filepath).name)
+                # Los recursos externos se guardan como rutas absolutas.
+                self.txt_icon_path.setText(str(selected_path))
 
     def _open_file_cross_platform(self, path):
         import sys
@@ -461,11 +474,51 @@ class CharacterEditDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo abrir:\n{e}")
 
+    def open_credential_location(self):
+        """Abre la carpeta que contiene el JSON del personaje detectado."""
+        credential_dir = self.initial_character_json_path.parent
+        if credential_dir.is_dir():
+            self._open_file_cross_platform(str(credential_dir.resolve()))
+        else:
+            QMessageBox.warning(
+                self,
+                "Advertencia",
+                f"No se encontró la ubicación de la credencial:\n{credential_dir}"
+            )
+
+    def _resolve_asset_path(self, raw_path):
+        asset_path = Path(raw_path).expanduser()
+        if asset_path.is_absolute():
+            return asset_path
+
+        current_candidate = Path(self.current_character_path) / asset_path
+        if current_candidate.exists():
+            return current_candidate
+
+        # Antes de guardar, los recursos relativos siguen físicamente en la
+        # carpeta original, incluso cuando el nombre nuevo aún no existe.
+        return self.initial_character_path / asset_path
+
+    def _serialize_asset_path(self, raw_path):
+        """Mantiene relativa la ruta de recursos que se moverá junto al personaje."""
+        raw_path = str(raw_path).strip()
+        if not raw_path:
+            return ""
+
+        asset_path = Path(raw_path).expanduser()
+        if not asset_path.is_absolute():
+            return raw_path
+
+        try:
+            return asset_path.resolve().relative_to(self.initial_character_path.resolve()).as_posix()
+        except ValueError:
+            # Los recursos externos deben conservar su ruta absoluta.
+            return str(asset_path.resolve())
+
     def open_icon_file(self):
         icon_path = self.txt_icon_path.text().strip()
-        char_path = self.txt_char_path.text().strip()
-        full_path = Path(char_path) / icon_path if char_path and icon_path else Path(icon_path)
-        if full_path.exists():
+        full_path = self._resolve_asset_path(icon_path) if icon_path else Path()
+        if full_path.is_file():
             self._open_file_cross_platform(str(full_path.resolve()))
         else:
             QMessageBox.warning(self, "Advertencia", f"El archivo no existe:\n{full_path}")
@@ -477,31 +530,34 @@ class CharacterEditDialog(QDialog):
             "Imágenes (*.png *.jpg *.jpeg *.webp *.gif *.bmp);;Todos los archivos (*)"
         )
         if filepath:
-            char_path = self.txt_char_path.text().strip()
-            if char_path:
+            selected_path = Path(filepath).resolve()
+            relative_path = None
+            for char_path in (self.initial_character_path, Path(self.current_character_path)):
                 try:
-                    rel_path = Path(filepath).relative_to(Path(char_path))
-                    self.txt_bg_path.setText(rel_path.as_posix())
+                    relative_path = selected_path.relative_to(char_path.resolve())
+                    break
                 except ValueError:
-                    self.txt_bg_path.setText(Path(filepath).name)
+                    continue
+
+            if relative_path is not None:
+                self.txt_bg_path.setText(relative_path.as_posix())
             else:
-                self.txt_bg_path.setText(Path(filepath).name)
+                self.txt_bg_path.setText(str(selected_path))
 
     def open_bg_file(self):
         bg_path = self.txt_bg_path.text().strip()
-        char_path = self.txt_char_path.text().strip()
-        full_path = Path(char_path) / bg_path if char_path and bg_path else Path(bg_path)
-        if full_path.exists():
+        full_path = self._resolve_asset_path(bg_path) if bg_path else Path()
+        if full_path.is_file():
             self._open_file_cross_platform(str(full_path.resolve()))
         else:
             QMessageBox.warning(self, "Advertencia", f"El archivo no existe:\n{full_path}")
 
     def open_char_dir(self):
-        char_path = self.txt_char_path.text().strip()
-        if char_path and Path(char_path).exists():
-            self._open_file_cross_platform(str(Path(char_path).resolve()))
+        char_path = Path(self.current_character_path)
+        if char_path.is_dir():
+            self._open_file_cross_platform(str(char_path.resolve()))
         else:
-            QMessageBox.warning(self, "Advertencia", f"La carpeta de personaje no existe o está vacía.")
+            QMessageBox.warning(self, "Advertencia", "La carpeta de personaje no existe o está vacía.")
 
     def save_data(self):
         try:
@@ -525,15 +581,20 @@ class CharacterEditDialog(QDialog):
                 return
 
             original_name = self.original_char_data.get("name", "")
-            original_char_path_str = self.original_char_data.get("character_path", "")
-            original_char_path = Path(original_char_path_str) if original_char_path_str else Path()
+            original_json_path_str = self.original_char_data.get("character_json_path", "")
+            original_json_file = (
+                Path(original_json_path_str)
+                if original_json_path_str
+                else self.initial_character_json_path
+            )
+            original_char_path = original_json_file.parent
 
             # Recolectar ropa interior seleccionada
             self._update_currently_selected_underwear()
             selected_underwear = self.selected_underwear
 
             # La nueva ruta de la carpeta que calculamos automáticamente
-            new_char_path = Path(self.txt_char_path.text().strip())
+            new_char_path = Path(self.current_character_path)
 
             # Preparar la nueva estructura character_data (usará el new_char_path ya resuelto)
             updated_data = {
@@ -543,49 +604,68 @@ class CharacterEditDialog(QDialog):
                 "alterego": self.txt_alterego.text().strip(),
                 "birthday": self.txt_birthday.date().toString("yyyy-MM-dd"),
                 "age": age,
-                "icon_path": self.txt_icon_path.text().strip(),
-                "background_path": self.txt_bg_path.text().strip(),
+                "icon_path": self._serialize_asset_path(self.txt_icon_path.text()),
+                "background_path": self._serialize_asset_path(self.txt_bg_path.text()),
                 "type_underwear": selected_underwear,
                 "short_masked_alterego": self.txt_short_masked.text().strip(),
-                "character_path": str(new_char_path.resolve()),
+                # Se calcula con la carpeta destino y el nombre del JSON que se guardará.
+                "character_json_path": str((new_char_path / f"__{new_name}__.json").resolve()),
                 "color_group": self.cb_color_group.currentText(),
                 "profession_group": self.txt_profession.text().strip(),
                 "time_of_year": self.cb_time_of_year.currentText()
             }
 
-            # Validar que exista la ruta original de personaje antes de renombrar
-            if not original_char_path.exists():
-                QMessageBox.warning(self, "Validación", f"La ruta original de personaje no existe:\n{original_char_path}")
+            # Validar la ubicación real del JSON detectado antes de guardar.
+            if not original_char_path.is_dir() or not original_json_file.is_file():
+                QMessageBox.warning(
+                    self,
+                    "Validación",
+                    f"No se encontró la credencial original:\n{original_json_file}"
+                )
                 return
 
-            # Nombres de JSON viejo y nuevo dentro de la carpeta actual (original)
-            old_json_file = original_char_path / f"__{original_name}__.json"
-            new_json_file = original_char_path / f"__{new_name}__.json"
+            # Comprobar conflictos antes de escribir o renombrar.
+            moving_folder = original_char_path.resolve() != new_char_path.resolve()
+            if moving_folder and new_char_path.exists():
+                QMessageBox.warning(self, "Validación", f"La carpeta destino ya existe:\n{new_char_path}")
+                return
 
-            # Escribir el nuevo JSON primero
+            old_json_file = original_json_file
+            new_json_file = original_char_path / f"__{new_name}__.json"
+            if new_json_file.exists() and new_json_file.resolve() != old_json_file.resolve():
+                QMessageBox.warning(self, "Validación", f"La credencial destino ya existe:\n{new_json_file}")
+                return
+
+            # Escribir primero el JSON nuevo dentro de la carpeta actual.
             with open(new_json_file, "w", encoding="utf-8") as jf:
                 json.dump({"character_data": updated_data}, jf, indent=4, ensure_ascii=False)
 
-            # Si el nombre cambió y existía un archivo viejo con el nombre antiguo, lo removemos
-            if original_name != new_name and old_json_file.exists() and old_json_file != new_json_file:
+            final_character_dir = original_char_path
+            if moving_folder:
                 try:
-                    old_json_file.unlink()
-                except Exception as ex:
-                    print(f"Advertencia eliminando archivo JSON anterior: {ex}")
-
-            # Ahora renombrar la carpeta del personaje si la ruta calculada es diferente
-            if original_char_path.resolve() != new_char_path.resolve():
-                if new_char_path.exists():
-                    QMessageBox.warning(self, "Validación", f"La carpeta destino ya existe:\n{new_char_path}")
-                    return
-
-                try:
-                    # Renombrar carpeta física
                     original_char_path.rename(new_char_path)
+                    final_character_dir = new_char_path
                 except Exception as ex:
-                    QMessageBox.critical(self, "Error al Guardar", f"No se pudo renombrar la carpeta del personaje:\n{ex}")
-                    # Deshacer guardado del json nuevo si es posible o simplemente retornar
+                    if new_json_file.exists() and new_json_file.resolve() != old_json_file.resolve():
+                        try:
+                            new_json_file.unlink()
+                        except OSError:
+                            pass
+                    QMessageBox.critical(
+                        self,
+                        "Error al Guardar",
+                        f"No se pudo renombrar la carpeta del personaje:\n{ex}"
+                    )
                     return
+
+            # Eliminar el archivo anterior usando su ubicación después del eventual rename.
+            final_old_json = final_character_dir / old_json_file.name
+            final_new_json = final_character_dir / new_json_file.name
+            if final_old_json.exists() and final_old_json.resolve() != final_new_json.resolve():
+                try:
+                    final_old_json.unlink()
+                except OSError as ex:
+                    print(f"Advertencia eliminando JSON anterior: {ex}")
 
             # Guardar el resultado en self.char_data para devolverlo
             self.char_data = updated_data

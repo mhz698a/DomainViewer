@@ -11,6 +11,29 @@ from domain_visor.theme import Theme
 # Caché global en memoria para las imágenes pre-cargadas en el hilo secundario
 PIXMAP_CACHE = {}
 
+
+def resolve_character_icon_path(char_data):
+    """Resuelve el archivo de imagen tomando el JSON del personaje como referencia."""
+    icon_path = str(char_data.get("icon_path", "")).strip()
+    if not icon_path:
+        return ""
+
+    image_path = Path(icon_path).expanduser()
+    if image_path.is_absolute():
+        return str(image_path.resolve())
+
+    json_path_str = char_data.get("character_json_path", "")
+    if json_path_str:
+        base_dir = Path(json_path_str).parent
+    else:
+        # Compatibilidad temporal con registros anteriores a character_json_path.
+        legacy_dir = char_data.get("character_path", "")
+        if not legacy_dir:
+            return ""
+        base_dir = Path(legacy_dir)
+
+    return str((base_dir / image_path).resolve())
+
 class CharacterIconItem(QGraphicsItem):
     """
     Representa un cuadrado individual de perfil de personaje de 20x20px.
@@ -25,7 +48,7 @@ class CharacterIconItem(QGraphicsItem):
         self.name = char_data.get("name", "")
         self.alterego = char_data.get("alterego", "")
         self.icon_path = char_data.get("icon_path", "")
-        self.character_path = char_data.get("character_path", "")
+        self.character_json_path = char_data.get("character_json_path", "")
 
         # Formatear el Tooltip (requisito 5): "{name} - {alterego}"
         # Transformación nombre propio (Title Case) y sin guiones bajos
@@ -42,7 +65,7 @@ class CharacterIconItem(QGraphicsItem):
         self.name = char_data.get("name", "")
         self.alterego = char_data.get("alterego", "")
         self.icon_path = char_data.get("icon_path", "")
-        self.character_path = char_data.get("character_path", "")
+        self.character_json_path = char_data.get("character_json_path", "")
 
         formatted_name = self.name.replace("_", " ").strip().title()
         formatted_alterego = self.alterego.replace("_", " ").strip().title()
@@ -57,14 +80,13 @@ class CharacterIconItem(QGraphicsItem):
 
     def load_pixmap(self):
         self.pixmap = None
-        if self.icon_path and self.character_path:
-            full_img_path = str(Path(self.character_path) / self.icon_path)
+        full_img_path = resolve_character_icon_path(self.char_data)
+        if full_img_path:
             if full_img_path in PIXMAP_CACHE:
                 self.pixmap = PIXMAP_CACHE[full_img_path]
-            else:
-                if Path(full_img_path).exists():
-                    self.pixmap = QPixmap(full_img_path)
-                    PIXMAP_CACHE[full_img_path] = self.pixmap
+            elif Path(full_img_path).is_file():
+                self.pixmap = QPixmap(full_img_path)
+                PIXMAP_CACHE[full_img_path] = self.pixmap
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -113,37 +135,40 @@ class CharacterIconItem(QGraphicsItem):
             event.accept()
 
     def open_profile_folder(self):
-        if self.character_path and Path(self.character_path).exists():
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(self.character_path).resolve())))
-        else:
-            view = None
-            scene = self.scene()
-            if scene:
-                views = scene.views()
-                if views:
-                    view = views[0]
-            msg = QMessageBox(view)
-            msg.setIcon(QMessageBox.Icon.Warning)
-            msg.setWindowTitle("Advertencia")
-            msg.setText(f"La carpeta del personaje no existe o está vacía:\n{self.character_path}")
-            msg.setStyleSheet(f"""
-                QMessageBox {{
-                    background-color: {Theme.APP_BACKGROUND};
-                    color: {Theme.TEXT_WHITE};
-                }}
-                QLabel {{
-                    color: {Theme.TEXT_WHITE};
-                }}
-                QPushButton {{
-                    background-color: #2d2d2d;
-                    border: 1px solid #555555;
-                    border-radius: 4px;
-                    padding: 6px 12px;
-                    color: {Theme.TEXT_WHITE};
-                    font-weight: bold;
-                }}
-            """)
-            msg.exec()
+        json_path_str = self.character_json_path
+        profile_dir = Path(json_path_str).parent if json_path_str else None
+        if profile_dir and profile_dir.is_dir():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(profile_dir.resolve())))
+            return
+
+        view = None
+        scene = self.scene()
+        if scene:
+            views = scene.views()
+            if views:
+                view = views[0]
+        msg = QMessageBox(view)
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setWindowTitle("Advertencia")
+        msg.setText(f"No se encontró la ubicación de la credencial:\n{json_path_str}")
+        msg.setStyleSheet(f"""
+            QMessageBox {{
+                background-color: {Theme.APP_BACKGROUND};
+                color: {Theme.TEXT_WHITE};
+            }}
+            QLabel {{
+                color: {Theme.TEXT_WHITE};
+            }}
+            QPushButton {{
+                background-color: #2d2d2d;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 6px 12px;
+                color: {Theme.TEXT_WHITE};
+                font-weight: bold;
+            }}
+        """)
+        msg.exec()
 
     def view_profile_credential(self):
         from domain_visor.character_dialog import CharacterEditDialog
@@ -155,7 +180,8 @@ class CharacterIconItem(QGraphicsItem):
                 view = views[0]
 
         old_name = self.name
-        old_char_path = self.character_path
+        old_character_json_path = self.character_json_path
+        old_img_path = resolve_character_icon_path(self.char_data)
 
         dialog = CharacterEditDialog(self.char_data, parent=view)
         if dialog.exec() == CharacterEditDialog.DialogCode.Accepted and dialog.saved:
@@ -164,10 +190,8 @@ class CharacterIconItem(QGraphicsItem):
             self.char_data.clear()
             self.char_data.update(new_data)
 
-            if self.icon_path and self.character_path:
-                old_img_path = str(Path(self.character_path) / self.icon_path)
-                if old_img_path in PIXMAP_CACHE:
-                    del PIXMAP_CACHE[old_img_path]
+            if old_img_path:
+                PIXMAP_CACHE.pop(old_img_path, None)
 
             self.update_tooltip_and_attributes(new_data)
             self.load_pixmap()
@@ -177,7 +201,7 @@ class CharacterIconItem(QGraphicsItem):
             year_str = str(new_data.get("year"))
             if year_str in mgr._cache:
                 for idx, char in enumerate(mgr._cache[year_str]):
-                    if char.get("character_path") == old_char_path or char.get("name") == old_name:
+                    if char.get("character_json_path") == old_character_json_path or char.get("name") == old_name:
                         mgr._cache[year_str][idx] = new_data.copy()
                         break
                 mgr.save_cache_file()
