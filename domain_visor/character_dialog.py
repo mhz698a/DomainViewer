@@ -483,7 +483,7 @@ class CharacterEditDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Advertencia",
-                f"No se encontró la ubicación de la credencial:\\n{credential_dir}"
+                f"No se encontró la ubicación de la credencial:\n{credential_dir}"
             )
 
     def _resolve_asset_path(self, raw_path):
@@ -505,7 +505,7 @@ class CharacterEditDialog(QDialog):
         if full_path.is_file():
             self._open_file_cross_platform(str(full_path.resolve()))
         else:
-            QMessageBox.warning(self, "Advertencia", f"El archivo no existe:\\n{full_path}")
+            QMessageBox.warning(self, "Advertencia", f"El archivo no existe:\n{full_path}")
 
     def set_bg_file(self):
         start_dir = self.get_start_directory()
@@ -534,7 +534,7 @@ class CharacterEditDialog(QDialog):
         if full_path.is_file():
             self._open_file_cross_platform(str(full_path.resolve()))
         else:
-            QMessageBox.warning(self, "Advertencia", f"El archivo no existe:\\n{full_path}")
+            QMessageBox.warning(self, "Advertencia", f"El archivo no existe:\n{full_path}")
 
     def open_char_dir(self):
         char_path = Path(self.current_character_path)
@@ -604,20 +604,20 @@ class CharacterEditDialog(QDialog):
                 QMessageBox.warning(
                     self,
                     "Validación",
-                    f"No se encontró la credencial original:\\n{original_json_file}"
+                    f"No se encontró la credencial original:\n{original_json_file}"
                 )
                 return
 
             # Comprobar conflictos antes de escribir o renombrar.
             moving_folder = original_char_path.resolve() != new_char_path.resolve()
             if moving_folder and new_char_path.exists():
-                QMessageBox.warning(self, "Validación", f"La carpeta destino ya existe:\\n{new_char_path}")
+                QMessageBox.warning(self, "Validación", f"La carpeta destino ya existe:\n{new_char_path}")
                 return
 
             old_json_file = original_json_file
             new_json_file = original_char_path / f"__{new_name}__.json"
             if new_json_file.exists() and new_json_file.resolve() != old_json_file.resolve():
-                QMessageBox.warning(self, "Validación", f"La credencial destino ya existe:\\n{new_json_file}")
+                QMessageBox.warning(self, "Validación", f"La credencial destino ya existe:\n{new_json_file}")
                 return
 
             # Escribir primero el JSON nuevo dentro de la carpeta actual.
@@ -638,7 +638,7 @@ class CharacterEditDialog(QDialog):
                     QMessageBox.critical(
                         self,
                         "Error al Guardar",
-                        f"No se pudo renombrar la carpeta del personaje:\\n{ex}"
+                        f"No se pudo renombrar la carpeta del personaje:\n{ex}"
                     )
                     return
 
