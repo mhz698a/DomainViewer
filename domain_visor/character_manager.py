@@ -68,40 +68,84 @@ class CharacterManager:
         except Exception as e:
             print(f"Error guardando caché de personajes: {e}")
 
-    def verify_cache_at_startup(self):
-        """
-        Se asegura de que los personajes guardados en caché sigan existiendo en disco.
-        Si TRUST_CACHE es False, verifica la existencia de las carpetas de los personajes en la caché.
-        Si no existen, los elimina de la caché. Luego realiza un escaneo para actualizar.
-        """
-        if not self.TRUST_CACHE:
-            dirty = False
-            # Crear una lista de claves a verificar
-            years_to_check = list(self._cache.keys())
-            for year_str in years_to_check:
-                valid_chars = []
-                for char in self._cache[year_str]:
-                    char_path_str = char.get("character_path", "")
-                    if char_path_str and Path(char_path_str).exists():
-                        valid_chars.append(char)
-                    else:
-                        dirty = True
-                if len(valid_chars) != len(self._cache[year_str]):
-                    self._cache[year_str] = valid_chars
-                    dirty = True
-            if dirty:
-                self.save_cache_file()
+    @staticmethod
+    def _find_character_json_file(character_dir: Path, character_name: str = ""):
+        """Localiza la credencial JSON existente dentro de la carpeta del personaje."""
+        expected_json = character_dir / f"__{character_name}__.json" if character_name else None
+        if expected_json and expected_json.is_file():
+            return expected_json
 
-        # Independientemente de TRUST_CACHE, realizamos un escaneo para asegurar que todo esté al día
+        json_files = sorted(path for path in character_dir.glob("__*.json") if path.is_file())
+        return json_files[0] if json_files else None
+
+    @classmethod
+    def _resolve_cached_json_path(cls, char_data: dict):
+        """Resuelve character_json_path, migrando temporalmente cachés antiguas."""
+        json_path_str = char_data.get("character_json_path", "")
+        if json_path_str:
+            json_path = Path(json_path_str)
+            if json_path.is_file():
+                return json_path
+
+        # Compatibilidad con cachés antiguas que todavía guardan character_path.
+        legacy_dir_str = char_data.get("character_path", "")
+        if legacy_dir_str:
+            legacy_dir = Path(legacy_dir_str)
+            if legacy_dir.is_dir():
+                return cls._find_character_json_file(legacy_dir, char_data.get("name", ""))
+
+        return None
+
+    def migrate_cached_characters(self):
+        """Migra la caché antigua a rutas de credencial y elimina character_path."""
+        dirty = False
+        for year_str, characters in list(self._cache.items()):
+            valid_characters = []
+            for char_data in characters:
+                json_path = self._resolve_cached_json_path(char_data)
+                if json_path:
+                    normalized_path = str(json_path.resolve())
+                    if char_data.get("character_json_path") != normalized_path:
+                        char_data["character_json_path"] = normalized_path
+                        dirty = True
+                    valid_characters.append(char_data)
+                else:
+                    dirty = True
+
+                if "character_path" in char_data:
+                    char_data.pop("character_path", None)
+                    dirty = True
+
+            if len(valid_characters) != len(characters):
+                self._cache[year_str] = valid_characters
+                dirty = True
+
+        if dirty:
+            self.save_cache_file()
+
+    @staticmethod
+    def _find_first_image(character_dir: Path) -> str:
+        image_extensions = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+        for sub_item in sorted(character_dir.iterdir()):
+            if sub_item.is_file() and sub_item.suffix.lower() in image_extensions:
+                return sub_item.name
+        return ""
+
+    def verify_cache_at_startup(self):
+        """Migra la caché antigua y vuelve a indexar las credenciales disponibles."""
+        self.migrate_cached_characters()
         self.scan_all_years()
 
-    def scan_all_years(self):
+    def scan_all_years(self, progress_callback=None):
         """
         Escanea las carpetas de años desde el primer año hasta el año actual.
         Filtra años futuros. Actualiza la caché con los personajes encontrados.
         """
+        # Migrar las referencias antiguas antes de iniciar el escaneo.
+        self.migrate_cached_characters()
+
         # 1. Comprobar si la ruta base existe. Si no, mostramos un mensaje por consola
-        # pero permitimos que el resto siga funcionando (requisito 1).
+        # pero permitimos que la caché de credenciales ya localizadas pueda seguir utilizándose.
         if not self.base_path.exists():
             print(f"Advertencia: La ruta base {self.base_path} no existe. No se cargarán nuevos personajes de disco.")
             return
@@ -111,11 +155,14 @@ class CharacterManager:
 
         updated_cache = {}
 
-        for year in range(first_year, current_year + 1):
+        total_years = max(1, current_year - first_year + 1)
+        for year_index, year in enumerate(range(first_year, current_year + 1), start=1):
             album_prefix = f"{max(0, year - 2003):02d}"
             year_dir = self.base_path / str(year) / f"{album_prefix}. album"
 
             if not year_dir.exists():
+                if progress_callback:
+                    progress_callback(year_index, total_years, year)
                 continue
 
             characters_list = []
@@ -175,9 +222,19 @@ class CharacterManager:
                             char_data["alterego"] = alterego
                             char_data["birthday"] = birthday
                             char_data["age"] = age
-                            char_data["character_path"] = str(item.resolve())
-                            # La ruta real se obtiene del JSON detectado durante el escaneo.
+                            # La credencial detectada es la única referencia persistente de ubicación.
+                            char_data.pop("character_path", None)
                             char_data["character_json_path"] = str(target_json.resolve())
+
+                            # Si la ruta de imagen guardada dejó de existir, recuperar una imagen local.
+                            icon_path = str(char_data.get("icon_path", "")).strip()
+                            if icon_path:
+                                icon_file = Path(icon_path)
+                                resolved_icon = icon_file if icon_file.is_absolute() else item / icon_file
+                                if not resolved_icon.is_file():
+                                    char_data["icon_path"] = self._find_first_image(item)
+                            else:
+                                char_data["icon_path"] = self._find_first_image(item)
 
                             # Guardar en target_json
                             try:
@@ -194,13 +251,8 @@ class CharacterManager:
                                     print(f"Error eliminando JSON anterior: {e}")
 
                         else:
-                            # Buscar primer imagen de la carpeta del personaje
-                            icon_path = ""
-                            img_extensions = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
-                            for sub_item in sorted(item.iterdir()):
-                                if sub_item.is_file() and sub_item.suffix.lower() in img_extensions:
-                                    icon_path = sub_item.name  # ruta relativa a la carpeta de personaje
-                                    break
+                            # Buscar la primera imagen disponible en la carpeta del personaje.
+                            icon_path = self._find_first_image(item)
 
                             char_data = {
                                 "year": year,
@@ -213,7 +265,6 @@ class CharacterManager:
                                 "background_path": "",
                                 "type_underwear": [],
                                 "short_masked_alterego": "",
-                                "character_path": str(item.resolve()),
                                 "character_json_path": str(target_json.resolve()),
                                 "color_group": "",
                                 "profession_group": "",
@@ -237,6 +288,9 @@ class CharacterManager:
                 characters_list.sort(key=lambda c: (c.get("position", 0), c.get("name", "").lower()))
                 # Limitar a un máximo de 6 perfiles por año (requisito profiles_row_item tiene capacidad de mostrar 6 perfiles)
                 updated_cache[str(year)] = characters_list[:6]
+
+            if progress_callback:
+                progress_callback(year_index, total_years, year)
 
         # Actualizar la caché en memoria y guardarla en el archivo
         self._cache.update(updated_cache)
